@@ -4,6 +4,7 @@ import { RolePill } from '../components/RolePill'
 import type { Role } from '../state/session'
 import { getSession, setPreferredRole } from '../state/session'
 import { Icons } from '../components/icons'
+import { BRAINLINK_LOGO_SRC } from '../branding'
 
 /** Fluent Emoji set — glossy 3D-style icons via Iconify */
 const HERO_3D_ICONS = [
@@ -12,10 +13,6 @@ const HERO_3D_ICONS = [
   { icon: 'fluent-emoji:man-teacher', label: 'Tutors' },
   { icon: 'fluent-emoji:handshake', label: 'Trusted match' },
 ] as const
-
-/** Bump when replacing `public/logo/brainlink-side-logo.png` so browsers fetch the new file. */
-const LOGO_REVISION = 2
-const LOGO_SRC = `/logo/brainlink-side-logo.png?v=${LOGO_REVISION}`
 
 const WHAT_WE_DO_FEATURES = [
   {
@@ -153,7 +150,7 @@ export function LandingPage() {
         <div className="landing-hero-band-inner">
           <nav className="landing-nav" aria-label="Primary">
             <Link to="/" className="landing-nav-logo">
-              <img src={LOGO_SRC} alt="BrainLink" />
+              <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" />
             </Link>
 
             <div className="landing-nav-right">

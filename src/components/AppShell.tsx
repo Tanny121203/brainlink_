@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { clearSession, getSession } from '../state/session'
-import { RolePill } from './RolePill'
 import { Icons } from './icons'
+import { BRAINLINK_LOGO_SRC } from '../branding'
 
 export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation()
@@ -21,10 +21,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       {!landingHome ? (
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true" />
+          <Link to="/" className="brand-logo-wrap">
+            <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" className="brand-logo-img" />
+          </Link>
           <div>
-            <div className="brand-name">BrainLink</div>
-            <div className="muted">Students · Parents · Tutors</div>
+            <div className="muted brand-tagline">Students · Parents · Tutors</div>
           </div>
         </div>
 
@@ -73,15 +74,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           {null}
         </div>
       </header>
-      ) : null}
-
-      {session ? (
-        <div style={{ marginBottom: 14 }} className="btn-row">
-          <span className="pill">
-            Signed in as <b style={{ color: 'var(--text-header)' }}>{session.displayName}</b>
-          </span>
-          <RolePill role={session.role} />
-        </div>
       ) : null}
 
       {children}
