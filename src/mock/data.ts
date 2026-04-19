@@ -46,6 +46,28 @@ export const tutorProfiles: TutorProfile[] = [
     city: 'Cebu City',
     rating: 4.9,
   },
+  {
+    id: 't-4',
+    name: 'L. Tan',
+    subjects: ['Filipino', 'Araling Panlipunan'],
+    level: 'JHS',
+    mode: 'In-person',
+    hourlyRate: 380,
+    classesCount: 52,
+    city: 'Quezon City',
+    rating: 4.6,
+  },
+  {
+    id: 't-5',
+    name: 'R. Villanueva',
+    subjects: ['Chemistry', 'Physics', 'Gen. Science'],
+    level: 'SHS',
+    mode: 'Hybrid',
+    hourlyRate: 520,
+    classesCount: 71,
+    city: 'Makati',
+    rating: 4.8,
+  },
 ]
 
 export type StudentNeed = {

@@ -19,64 +19,67 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`app-shell${landingHome ? ' app-shell--landing-home' : ''}`}>
       {!landingHome ? (
-      <header className="topbar">
-        <div className="brand">
-          <Link to="/" className="brand-logo-wrap">
-            <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" className="brand-logo-img" />
-          </Link>
-          <div>
-            <div className="muted brand-tagline">Students · Parents · Tutors</div>
-          </div>
-        </div>
-
-        <div className="btn-row">
-          {showBack ? (
-            <button className="btn" onClick={() => navigate('/')}>
-              {Icons.ArrowLeft({ size: 16 })}
-              Back
-            </button>
-          ) : null}
-
-          {location.pathname === '/' && !session ? (
-            <>
-              <Link className="btn btn-primary btn-student" to="/sign-up">
-                {Icons.UserPlus({ size: 16 })}
-                Create account
+        <div className="app-layout-column">
+          <header className="topbar">
+            <div className="brand">
+              <Link to="/" className="brand-logo-wrap">
+                <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" className="brand-logo-img" />
               </Link>
-              <Link className="btn btn-elevated" to="/sign-in">
-                {Icons.LogIn({ size: 16 })}
-                Sign in
-              </Link>
-            </>
-          ) : null}
+              <div>
+                <div className="muted brand-tagline">Students · Parents · Tutors</div>
+              </div>
+            </div>
 
-          {session ? (
-            <>
-              {!inApp ? (
-                <Link className="btn" to="/app">
-                  {Icons.Dashboard({ size: 16 })}
-                  Dashboard
-                </Link>
+            <div className="btn-row">
+              {showBack ? (
+                <button className="btn" onClick={() => navigate('/')}>
+                  {Icons.ArrowLeft({ size: 16 })}
+                  Back
+                </button>
               ) : null}
-              <button
-                className="btn"
-                onClick={() => {
-                  clearSession()
-                  navigate('/', { replace: true })
-                }}
-              >
-                {Icons.LogOut({ size: 16 })}
-                Sign out
-              </button>
-            </>
-          ) : null}
 
-          {null}
+              {location.pathname === '/' && !session ? (
+                <>
+                  <Link className="btn btn-primary btn-student" to="/sign-up">
+                    {Icons.UserPlus({ size: 16 })}
+                    Create account
+                  </Link>
+                  <Link className="btn btn-elevated" to="/sign-in">
+                    {Icons.LogIn({ size: 16 })}
+                    Sign in
+                  </Link>
+                </>
+              ) : null}
+
+              {session ? (
+                <>
+                  {!inApp ? (
+                    <Link className="btn" to="/app">
+                      {Icons.Dashboard({ size: 16 })}
+                      Dashboard
+                    </Link>
+                  ) : null}
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      clearSession()
+                      navigate('/', { replace: true })
+                    }}
+                  >
+                    {Icons.LogOut({ size: 16 })}
+                    Sign out
+                  </button>
+                </>
+              ) : null}
+
+              {null}
+            </div>
+          </header>
+          {children}
         </div>
-      </header>
-      ) : null}
-
-      {children}
+      ) : (
+        children
+      )}
 
       <footer className="muted" style={{ marginTop: 18 }}>
         BrainLink — connect learning with the right support.

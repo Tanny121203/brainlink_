@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { RolePill } from '../components/RolePill'
 import {
@@ -24,6 +25,9 @@ import {
 import type { Session } from '../state/session'
 import { SectionTitle, Stat } from '../components/ui'
 import { Icons } from '../components/icons'
+import { MessagesPanel } from './MessagesPage'
+import { NotesPanel } from './NotesPage'
+import { recordTutorSentOffer } from '../state/inbox'
 
 function roleTheme(session: Session) {
   switch (session.role) {
@@ -75,7 +79,14 @@ function StatusPill({
   )
 }
 
-function TutorCard({ t }: { t: TutorProfile }) {
+function TutorCard({
+  t,
+  existingTutor,
+}: {
+  t: TutorProfile
+  /** When set, this tutor is already in the learner’s roster (student/parent). */
+  existingTutor?: boolean
+}) {
   return (
     <div className="card">
       <div className="card-inner">
@@ -92,7 +103,14 @@ function TutorCard({ t }: { t: TutorProfile }) {
               </span>
             </p>
           </div>
-          <div className="pill">₱{t.hourlyRate}/hr</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            {existingTutor ? (
+              <span className="pill" title="Already in your tutors list">
+                Your tutor
+              </span>
+            ) : null}
+            <div className="pill">₱{t.hourlyRate}/hr</div>
+          </div>
         </div>
 
         <div className="btn-row" style={{ marginTop: 10 }}>
@@ -113,11 +131,249 @@ function TutorCard({ t }: { t: TutorProfile }) {
           </button>
           <button className="btn">
             {Icons.Calendar({ size: 16 })}
-            Request session
+            {existingTutor ? 'Book' : 'Request session'}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function YourTutorsStudentList() {
+  return (
+    <section className="card">
+      <div className="card-inner">
+        <SectionTitle
+          title="Your tutors"
+          subtitle="People you’re currently learning with."
+        />
+        <div className="grid" style={{ gap: 10, marginTop: 12 }}>
+          {studentTutors.map((rel) => {
+            const t = tutorProfiles.find((x) => x.id === rel.tutorId)
+            if (!t) return null
+            return (
+              <div
+                key={rel.tutorId}
+                className="card"
+                style={{ background: 'rgba(255,255,255,0.62)' }}
+              >
+                <div className="card-inner">
+                  <div className="card-header">
+                    <div>
+                      <h3 style={{ fontSize: 16 }}>{t.name}</h3>
+                      <p className="muted" style={{ marginTop: 6 }}>
+                        {rel.relationship} • Since {rel.since}
+                      </p>
+                    </div>
+                    <span className="pill">
+                      {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="btn-row">
+                    <Chip text={t.mode} />
+                    <Chip text={t.level} />
+                    {t.subjects.slice(0, 2).map((s) => (
+                      <Chip key={s} text={s} />
+                    ))}
+                  </div>
+                  <div className="btn-row" style={{ marginTop: 10 }}>
+                    <button className="btn">
+                      {Icons.Message({ size: 16 })}
+                      Message
+                    </button>
+                    <button className="btn">
+                      {Icons.Calendar({ size: 16 })}
+                      Book
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StudentTutorsBrowseHub({
+  tutorView,
+  setTutorView,
+  query,
+  setQuery,
+  level,
+  setLevel,
+  mode,
+  setMode,
+  filteredTutors,
+  existingTutorIds,
+}: {
+  tutorView: 'discover' | 'my'
+  setTutorView: (v: 'discover' | 'my') => void
+  query: string
+  setQuery: (v: string) => void
+  level: 'All' | TutorProfile['level']
+  setLevel: (v: 'All' | TutorProfile['level']) => void
+  mode: 'All' | TutorProfile['mode']
+  setMode: (v: 'All' | TutorProfile['mode']) => void
+  filteredTutors: TutorProfile[]
+  existingTutorIds: Set<string>
+}) {
+  return (
+    <section className="grid" style={{ gap: 14 }}>
+      <div className="card">
+        <div className="card-inner">
+          <div className="label" style={{ marginBottom: 8 }}>
+            Tutors
+          </div>
+          <div className="nav-group">
+            <button
+              type="button"
+              className={`btn nav-item ${tutorView === 'discover' ? 'is-active' : ''}`}
+              data-accent="student"
+              onClick={() => setTutorView('discover')}
+            >
+              {Icons.Search({ size: 16 })}
+              Discover tutors
+            </button>
+            <button
+              type="button"
+              className={`btn nav-item ${tutorView === 'my' ? 'is-active' : ''}`}
+              data-accent="student"
+              onClick={() => setTutorView('my')}
+            >
+              {Icons.Users({ size: 16 })}
+              Your tutors
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {tutorView === 'my' ? (
+        <YourTutorsStudentList />
+      ) : (
+        <BrowseTutorsDiscover
+          title="Browse tutors"
+          subtitle="Search by subject, place, or name. Tutors you already work with are labeled in results."
+          query={query}
+          setQuery={setQuery}
+          level={level}
+          setLevel={setLevel}
+          mode={mode}
+          setMode={setMode}
+          filteredTutors={filteredTutors}
+          existingTutorIds={existingTutorIds}
+        />
+      )}
+    </section>
+  )
+}
+
+function BrowseTutorsDiscover({
+  title,
+  subtitle,
+  query,
+  setQuery,
+  level,
+  setLevel,
+  mode,
+  setMode,
+  filteredTutors,
+  existingTutorIds,
+}: {
+  title: string
+  subtitle: string
+  query: string
+  setQuery: (v: string) => void
+  level: 'All' | TutorProfile['level']
+  setLevel: (v: 'All' | TutorProfile['level']) => void
+  mode: 'All' | TutorProfile['mode']
+  setMode: (v: 'All' | TutorProfile['mode']) => void
+  filteredTutors: TutorProfile[]
+  /** Tutor ids already linked on the account (shown with a “Your tutor” badge). */
+  existingTutorIds: Set<string>
+}) {
+  return (
+    <section className="grid" style={{ gap: 14 }}>
+      <div className="card">
+        <div className="card-inner">
+          <div className="card-header">
+            <div>
+              <h2 style={{ fontSize: 20 }}>{title}</h2>
+              <p className="subtle" style={{ marginTop: 6 }}>
+                {subtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-2" style={{ marginTop: 10 }}>
+            <div className="field">
+              <div className="label">Search</div>
+              <input
+                className="input"
+                placeholder="e.g., Math, English, Quezon City"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-2" style={{ gap: 10 }}>
+              <div className="field">
+                <div className="label">Level</div>
+                <select
+                  className="input"
+                  value={level}
+                  onChange={(e) => setLevel(e.target.value as typeof level)}
+                >
+                  <option value="All">All</option>
+                  <option value="Elementary">Elementary</option>
+                  <option value="JHS">JHS</option>
+                  <option value="SHS">SHS</option>
+                  <option value="College">College</option>
+                </select>
+              </div>
+              <div className="field">
+                <div className="label">Mode</div>
+                <select
+                  className="input"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as typeof mode)}
+                >
+                  <option value="All">All</option>
+                  <option value="Online">Online</option>
+                  <option value="In-person">In-person</option>
+                  <option value="Hybrid">Hybrid</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button
+              className="btn"
+              onClick={() => {
+                setQuery('')
+                setLevel('All')
+                setMode('All')
+              }}
+            >
+              {Icons.Filter({ size: 16 })}
+              Clear filters
+            </button>
+            <button className="btn">Save search</button>
+          </div>
+        </div>
+      </div>
+
+      <section className="grid grid-2">
+        {filteredTutors.map((t) => (
+          <TutorCard
+            key={t.id}
+            t={t}
+            existingTutor={existingTutorIds.has(t.id)}
+          />
+        ))}
+      </section>
+    </section>
   )
 }
 
@@ -134,6 +390,10 @@ function todoTone(t: StudentTodo): 'good' | 'warn' | 'neutral' {
 }
 
 export function DashboardPage({ session }: { session: Session }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isMessagesRoute = location.pathname === '/app/messages'
+  const isNotesRoute = location.pathname === '/app/notes'
   const theme = roleTheme(session)
   const studentProfile =
     session.role === 'student' ? (session.profile as unknown as { yearLevel?: string; learningGoal?: string } | undefined) : undefined
@@ -149,7 +409,7 @@ export function DashboardPage({ session }: { session: Session }) {
   type Section =
     | 'student.overview'
     | 'student.sessions'
-    | 'student.tutors'
+    | 'student.browse'
     | 'student.todos'
     | 'parent.overview'
     | 'parent.find'
@@ -178,6 +438,9 @@ export function DashboardPage({ session }: { session: Session }) {
   const [query, setQuery] = useState('')
   const [level, setLevel] = useState<'All' | TutorProfile['level']>('All')
   const [mode, setMode] = useState<'All' | TutorProfile['mode']>('All')
+  const [studentTutorView, setStudentTutorView] = useState<'discover' | 'my'>(
+    'discover'
+  )
 
   const [detailsNeedId, setDetailsNeedId] = useState<string | null>(null)
   const [offerNeedId, setOfferNeedId] = useState<string | null>(null)
@@ -204,6 +467,15 @@ export function DashboardPage({ session }: { session: Session }) {
     })
   }, [query, level, mode])
 
+  const studentExistingTutorIds = useMemo(
+    () => new Set(studentTutors.map((r) => r.tutorId)),
+    []
+  )
+  const parentExistingTutorIds = useMemo(
+    () => new Set(parentTutors.map((r) => r.tutorId)),
+    []
+  )
+
   const detailsNeed = detailsNeedId
     ? studentNeeds.find((s) => s.id === detailsNeedId) ?? null
     : null
@@ -223,7 +495,7 @@ export function DashboardPage({ session }: { session: Session }) {
       ? [
           { key: 'student.overview', label: 'Overview', icon: Icons.Dashboard },
           { key: 'student.sessions', label: 'Sessions', icon: Icons.Calendar },
-          { key: 'student.tutors', label: 'Tutors', icon: Icons.Users },
+          { key: 'student.browse', label: 'Browse tutors', icon: Icons.Search },
           { key: 'student.todos', label: 'To‑dos', icon: Icons.CheckBook },
         ]
       : session.role === 'parent'
@@ -256,18 +528,32 @@ export function DashboardPage({ session }: { session: Session }) {
           <div className="card-header" style={{ marginBottom: 0 }}>
             <div>
               <RolePill role={session.role} />
-              <h2 style={{ marginTop: 10 }}>{theme.headline}</h2>
+              <h2 style={{ marginTop: 10 }}>
+                {isNotesRoute ? 'Notes' : isMessagesRoute ? 'Messages' : theme.headline}
+              </h2>
               <p className="subtle" style={{ marginTop: 6, maxWidth: 760 }}>
-                {session.role === 'student' &&
-                (studentProfile?.yearLevel || studentProfile?.learningGoal)
-                  ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
-                  : session.role === 'parent' &&
-                      (parentProfile?.childName || parentProfile?.childYearLevel)
-                    ? `${theme.blurb} • ${parentProfile?.childName ?? parentChild.name}${parentProfile?.childYearLevel ? ` • ${parentProfile.childYearLevel}` : ''}`
-                    : session.role === 'tutor' &&
-                        (tutorProfile?.subjects || tutorProfile?.yearsExperience)
-                      ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
-                      : theme.blurb}
+                {isNotesRoute
+                  ? session.role === 'student'
+                    ? 'Session summaries and next steps from your tutors.'
+                    : session.role === 'parent'
+                      ? 'See what was covered in each lesson and what to reinforce at home.'
+                      : 'Capture outcomes and homework after each session.'
+                  : isMessagesRoute
+                    ? session.role === 'student'
+                      ? 'Chats with tutors about your subjects and sessions.'
+                      : session.role === 'parent'
+                        ? 'Messages from tutors about your child’s learning.'
+                        : 'Conversations with students and parents.'
+                    : session.role === 'student' &&
+                        (studentProfile?.yearLevel || studentProfile?.learningGoal)
+                      ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
+                      : session.role === 'parent' &&
+                          (parentProfile?.childName || parentProfile?.childYearLevel)
+                        ? `${theme.blurb} • ${parentProfile?.childName ?? parentChild.name}${parentProfile?.childYearLevel ? ` • ${parentProfile.childYearLevel}` : ''}`
+                        : session.role === 'tutor' &&
+                            (tutorProfile?.subjects || tutorProfile?.yearsExperience)
+                          ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
+                          : theme.blurb}
               </p>
             </div>
             <div className="pill">{session.displayName}</div>
@@ -329,9 +615,12 @@ export function DashboardPage({ session }: { session: Session }) {
                 {sidebarItems.map((it) => (
                   <button
                     key={it.key}
-                    className={`btn nav-item ${section === it.key ? 'is-active' : ''}`}
+                    className={`btn nav-item ${!isMessagesRoute && !isNotesRoute && section === it.key ? 'is-active' : ''}`}
                     data-accent={accentKey}
-                    onClick={() => setSection(it.key)}
+                    onClick={() => {
+                      navigate('/app')
+                      setSection(it.key)
+                    }}
                   >
                     {it.icon({ size: 16 })}
                     {it.label}
@@ -342,11 +631,21 @@ export function DashboardPage({ session }: { session: Session }) {
               <div className="divider" style={{ margin: '12px 0' }} />
 
               <div className="nav-group">
-                <button className="btn nav-item">
+                <button
+                  type="button"
+                  className={`btn nav-item ${isMessagesRoute ? 'is-active' : ''}`}
+                  data-accent={accentKey}
+                  onClick={() => navigate('/app/messages')}
+                >
                   {Icons.Message({ size: 16 })}
                   Messages
                 </button>
-                <button className="btn nav-item">
+                <button
+                  type="button"
+                  className={`btn nav-item ${isNotesRoute ? 'is-active' : ''}`}
+                  data-accent={accentKey}
+                  onClick={() => navigate('/app/notes')}
+                >
                   {Icons.CheckBook({ size: 16 })}
                   Notes
                 </button>
@@ -356,7 +655,11 @@ export function DashboardPage({ session }: { session: Session }) {
         </aside>
 
         <div className="content">
-          {session.role === 'student' ? (
+          {isNotesRoute ? (
+            <NotesPanel session={session} />
+          ) : isMessagesRoute ? (
+            <MessagesPanel session={session} />
+          ) : session.role === 'student' ? (
             section === 'student.sessions' ? (
               <section className="card">
                 <div className="card-inner">
@@ -415,65 +718,19 @@ export function DashboardPage({ session }: { session: Session }) {
                   </div>
                 </div>
               </section>
-            ) : section === 'student.tutors' ? (
-              <section className="card">
-                <div className="card-inner">
-                  <SectionTitle
-                    title="Your tutors"
-                    subtitle="People you’re currently learning with."
-                    right={
-                      <button className="btn">
-                        {Icons.Search({ size: 16 })}
-                        Find new tutor
-                      </button>
-                    }
-                  />
-                  <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                    {studentTutors.map((rel) => {
-                      const t = tutorProfiles.find((x) => x.id === rel.tutorId)
-                      if (!t) return null
-                      return (
-                        <div
-                          key={rel.tutorId}
-                          className="card"
-                          style={{ background: 'rgba(255,255,255,0.62)' }}
-                        >
-                          <div className="card-inner">
-                            <div className="card-header">
-                              <div>
-                                <h3 style={{ fontSize: 16 }}>{t.name}</h3>
-                                <p className="muted" style={{ marginTop: 6 }}>
-                                  {rel.relationship} • Since {rel.since}
-                                </p>
-                              </div>
-                              <span className="pill">
-                                {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
-                              </span>
-                            </div>
-                            <div className="btn-row">
-                              <Chip text={t.mode} />
-                              <Chip text={t.level} />
-                              {t.subjects.slice(0, 2).map((s) => (
-                                <Chip key={s} text={s} />
-                              ))}
-                            </div>
-                            <div className="btn-row" style={{ marginTop: 10 }}>
-                              <button className="btn">
-                                {Icons.Message({ size: 16 })}
-                                Message
-                              </button>
-                              <button className="btn">
-                                {Icons.Calendar({ size: 16 })}
-                                Book
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </section>
+            ) : section === 'student.browse' ? (
+              <StudentTutorsBrowseHub
+                tutorView={studentTutorView}
+                setTutorView={setStudentTutorView}
+                query={query}
+                setQuery={setQuery}
+                level={level}
+                setLevel={setLevel}
+                mode={mode}
+                setMode={setMode}
+                filteredTutors={filteredTutors}
+                existingTutorIds={studentExistingTutorIds}
+              />
             ) : section === 'student.todos' ? (
               <section className="card">
                 <div className="card-inner">
@@ -772,91 +1029,18 @@ export function DashboardPage({ session }: { session: Session }) {
                 </div>
               </section>
             ) : section === 'parent.find' ? (
-              // reuse the existing "Find a tutor" UI (same as before)
-              <section className="grid" style={{ gap: 14 }}>
-                <div className="card">
-                  <div className="card-inner">
-                    <div className="card-header">
-                      <div>
-                        <h2 style={{ fontSize: 20 }}>Find a tutor</h2>
-                        <p className="subtle" style={{ marginTop: 6 }}>
-                          Search by subject, location, or tutor name.
-                        </p>
-                      </div>
-                      <div className="pill">
-                        {filteredTutors.length} result
-                        {filteredTutors.length === 1 ? '' : 's'}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-2" style={{ marginTop: 10 }}>
-                      <div className="field">
-                        <div className="label">Search</div>
-                        <input
-                          className="input"
-                          placeholder="e.g., Math, English, Quezon City"
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                        />
-                      </div>
-                      <div className="grid grid-2" style={{ gap: 10 }}>
-                        <div className="field">
-                          <div className="label">Level</div>
-                          <select
-                            className="input"
-                            value={level}
-                            onChange={(e) =>
-                              setLevel(e.target.value as typeof level)
-                            }
-                          >
-                            <option value="All">All</option>
-                            <option value="Elementary">Elementary</option>
-                            <option value="JHS">JHS</option>
-                            <option value="SHS">SHS</option>
-                            <option value="College">College</option>
-                          </select>
-                        </div>
-                        <div className="field">
-                          <div className="label">Mode</div>
-                          <select
-                            className="input"
-                            value={mode}
-                            onChange={(e) =>
-                              setMode(e.target.value as typeof mode)
-                            }
-                          >
-                            <option value="All">All</option>
-                            <option value="Online">Online</option>
-                            <option value="In-person">In-person</option>
-                            <option value="Hybrid">Hybrid</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="btn-row" style={{ marginTop: 12 }}>
-                      <button
-                        className="btn"
-                        onClick={() => {
-                          setQuery('')
-                          setLevel('All')
-                          setMode('All')
-                        }}
-                      >
-                        {Icons.Filter({ size: 16 })}
-                        Clear filters
-                      </button>
-                      <button className="btn">Save search</button>
-                    </div>
-                  </div>
-                </div>
-
-                <section className="grid grid-2">
-                  {filteredTutors.map((t) => (
-                    <TutorCard key={t.id} t={t} />
-                  ))}
-                </section>
-              </section>
+              <BrowseTutorsDiscover
+                title="Find a tutor"
+                subtitle="Search by subject, location, or tutor name. Tutors already working with your child are labeled."
+                query={query}
+                setQuery={setQuery}
+                level={level}
+                setLevel={setLevel}
+                mode={mode}
+                setMode={setMode}
+                filteredTutors={filteredTutors}
+                existingTutorIds={parentExistingTutorIds}
+              />
             ) : (
               <section className="card">
                 <div className="card-inner">
@@ -1211,24 +1395,69 @@ export function DashboardPage({ session }: { session: Session }) {
 
       <Modal
         open={!!offerNeed}
-        title={offerNeed ? `Send offer — ${offerNeed.studentName}` : 'Send offer'}
+        title={
+          offerNeed && offerSentForNeedId === offerNeed.id
+            ? 'Offer sent'
+            : offerNeed
+              ? `Send offer — ${offerNeed.studentName}`
+              : 'Send offer'
+        }
         onClose={() => setOfferNeedId(null)}
         footer={
           offerNeed ? (
-            <>
-              <button className="btn" onClick={() => setOfferNeedId(null)}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary btn-tutor"
-                onClick={() => {
-                  setOfferSentForNeedId(offerNeed.id)
-                }}
-              >
-                {Icons.Send({ size: 16 })}
-                Send offer
-              </button>
-            </>
+            offerSentForNeedId === offerNeed.id ? (
+              <>
+                <button className="btn" onClick={() => setOfferNeedId(null)}>
+                  Done
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    const q = new URLSearchParams()
+                    q.set('request', offerNeed.id)
+                    q.set('student', offerNeed.studentName)
+                    navigate(`/app/messages?${q.toString()}`)
+                    setOfferNeedId(null)
+                    setOfferSentForNeedId(null)
+                  }}
+                >
+                  {Icons.Message({ size: 16 })}
+                  Open messages
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn" onClick={() => setOfferNeedId(null)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary btn-tutor"
+                  onClick={() => {
+                    if (session.role === 'tutor' && offerNeed) {
+                      const rate =
+                        Number(String(offerRate).replace(/[^\d.]/g, '')) || 0
+                      recordTutorSentOffer(
+                        session.email,
+                        {
+                          requestId: offerNeed.id,
+                          studentName: offerNeed.studentName,
+                          subject: offerNeed.subject,
+                          proposedRate: rate,
+                          availability: offerAvailability,
+                          message: offerMessage,
+                        },
+                        session.displayName
+                      )
+                    }
+                    setOfferSentForNeedId(offerNeed.id)
+                  }}
+                >
+                  {Icons.Send({ size: 16 })}
+                  Send offer
+                </button>
+              </>
+            )
           ) : null
         }
       >
@@ -1244,16 +1473,9 @@ export function DashboardPage({ session }: { session: Session }) {
             {offerSentForNeedId === offerNeed.id ? (
               <div className="card" style={{ background: 'rgba(255,255,255,0.65)' }}>
                 <div className="card-inner">
-                  <h3 style={{ fontSize: 18 }}>Offer sent</h3>
-                  <p className="subtle" style={{ marginTop: 8 }}>
+                  <p className="subtle" style={{ marginTop: 0 }}>
                     The parent can now review your offer and message you back.
                   </p>
-                  <div className="btn-row" style={{ marginTop: 12 }}>
-                    <button className="btn" onClick={() => setOfferNeedId(null)}>
-                      Done
-                    </button>
-                    <button className="btn">Open messages</button>
-                  </div>
                 </div>
               </div>
             ) : (
