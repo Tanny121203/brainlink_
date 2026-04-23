@@ -10,6 +10,8 @@ export type TutorProfile = {
   classesCount: number
   city: string
   rating: number
+  /** Weekly availability slots ("Mon:morning", "Tue:evening", ...). */
+  availability: string[]
 }
 
 export const tutorProfiles: TutorProfile[] = [
@@ -23,6 +25,14 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 88,
     city: 'Quezon City',
     rating: 4.8,
+    availability: [
+      'Mon:evening',
+      'Tue:evening',
+      'Wed:afternoon',
+      'Thu:evening',
+      'Sat:morning',
+      'Sat:afternoon',
+    ],
   },
   {
     id: 't-2',
@@ -34,6 +44,13 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 63,
     city: 'Manila',
     rating: 4.7,
+    availability: [
+      'Mon:afternoon',
+      'Wed:afternoon',
+      'Wed:evening',
+      'Fri:evening',
+      'Sat:morning',
+    ],
   },
   {
     id: 't-3',
@@ -45,6 +62,13 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 41,
     city: 'Cebu City',
     rating: 4.9,
+    availability: [
+      'Tue:morning',
+      'Tue:afternoon',
+      'Thu:morning',
+      'Thu:afternoon',
+      'Sun:morning',
+    ],
   },
   {
     id: 't-4',
@@ -56,6 +80,7 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 52,
     city: 'Quezon City',
     rating: 4.6,
+    availability: ['Mon:afternoon', 'Wed:afternoon', 'Fri:afternoon'],
   },
   {
     id: 't-5',
@@ -67,6 +92,14 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 71,
     city: 'Makati',
     rating: 4.8,
+    availability: [
+      'Mon:evening',
+      'Wed:evening',
+      'Fri:evening',
+      'Sat:morning',
+      'Sat:afternoon',
+      'Sun:afternoon',
+    ],
   },
 ]
 

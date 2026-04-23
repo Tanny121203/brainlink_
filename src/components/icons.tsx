@@ -264,5 +264,74 @@ export const Icons = {
       <path d="M12 2a15 15 0 0 0 0 20" />
     </Svg>
   ),
+  Close: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6l-12 12" />
+    </Svg>
+  ),
+  Camera: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h2l1.5-2h6l1.5 2h2A2.5 2.5 0 0 1 21 8.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </Svg>
+  ),
+  Trash: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+      <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+    </Svg>
+  ),
+  Bell: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M6 8a6 6 0 1 1 12 0c0 6 3 8 3 8H3s3-2 3-8z" />
+      <path d="M10 21a2 2 0 0 0 4 0" />
+    </Svg>
+  ),
+  BellOff: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M3 3l18 18" />
+      <path d="M8.5 4.5A6 6 0 0 1 18 8c0 3.5 1 5.5 2 7" />
+      <path d="M5 17h13" />
+      <path d="M10 21a2 2 0 0 0 4 0" />
+    </Svg>
+  ),
+  CheckCircle: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+    </Svg>
+  ),
+  MoreHorizontal: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="19" cy="12" r="1.4" />
+    </Svg>
+  ),
+  Sun: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="M4.93 4.93l1.41 1.41" />
+      <path d="M17.66 17.66l1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="M4.93 19.07l1.41-1.41" />
+      <path d="M17.66 6.34l1.41-1.41" />
+    </Svg>
+  ),
+  Moon: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </Svg>
+  ),
+  ChevronRight: (p: IconProps) => (
+    <Svg {...defaults(p)}>
+      <path d="M9 6l6 6-6 6" />
+    </Svg>
+  ),
 } as const
 

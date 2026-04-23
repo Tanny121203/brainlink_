@@ -12,6 +12,7 @@ export type StudentProfile = {
   schoolName?: string
   subjectsToImprove?: string
   learningGoal?: string
+  preferredMode?: 'Online' | 'In-person' | 'Hybrid'
 }
 
 export type ParentProfile = {
@@ -27,6 +28,7 @@ export type TutorProfile = {
   teachingMode?: 'Online' | 'In-person' | 'Hybrid'
   city?: string
   shortBio?: string
+  photoDataUrl?: string
 }
 
 const STORAGE_KEY = 'brainlink.session.v1'
@@ -43,6 +45,14 @@ export function getSession(): Session | null {
 
 export function setSession(session: Session) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+}
+
+export function updateSession(patch: Partial<Session>): Session | null {
+  const current = getSession()
+  if (!current) return null
+  const next: Session = { ...current, ...patch }
+  setSession(next)
+  return next
 }
 
 export function clearSession() {

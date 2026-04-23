@@ -2,8 +2,9 @@ import { Icon } from '@iconify/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { RolePill } from '../components/RolePill'
 import type { Role } from '../state/session'
-import { getSession, setPreferredRole } from '../state/session'
+import { setPreferredRole } from '../state/session'
 import { Icons } from '../components/icons'
+import { useDocumentTitle } from '../components/Toast'
 import { BRAINLINK_LOGO_SRC } from '../branding'
 
 /** Fluent Emoji set — glossy 3D-style icons via Iconify */
@@ -139,8 +140,8 @@ function RoleCard({ role }: { role: Role }) {
 }
 
 export function LandingPage() {
+  useDocumentTitle('BrainLink — Tutors, students, and parents together')
   const nav = useNavigate()
-  const session = getSession()
 
   const goCreateAccount = () => nav('/sign-up')
 
@@ -157,21 +158,12 @@ export function LandingPage() {
               <a className="landing-nav-link" href="#what-we-do">
                 What we do
               </a>
-              {session ? (
-                <Link className="btn btn-primary btn-student" to="/app">
-                  {Icons.Dashboard({ size: 16 })}
-                  Dashboard
-                </Link>
-              ) : (
-                <>
-                  <Link className="landing-nav-signin" to="/sign-in">
-                    Sign in
-                  </Link>
-                  <button type="button" className="btn btn-work-with-us" onClick={goCreateAccount}>
-                    Work with us
-                  </button>
-                </>
-              )}
+              <Link className="landing-nav-signin" to="/sign-in">
+                Sign in
+              </Link>
+              <button type="button" className="btn btn-work-with-us" onClick={goCreateAccount}>
+                Get started
+              </button>
             </div>
           </nav>
 
@@ -186,16 +178,9 @@ export function LandingPage() {
                 schedule sessions, stay organized, and achieve consistent progress.
               </p>
               <div className="landing-hero-actions">
-                {session ? (
-                  <Link className="btn btn-primary btn-tutor" to="/app">
-                    {Icons.Dashboard({ size: 18 })}
-                    Go to your dashboard
-                  </Link>
-                ) : (
-                  <button type="button" className="btn btn-work-with-us btn-work-with-us-lg" onClick={goCreateAccount}>
-                    Work with us
-                  </button>
-                )}
+                <button type="button" className="btn btn-work-with-us btn-work-with-us-lg" onClick={goCreateAccount}>
+                  Get started
+                </button>
               </div>
             </div>
 
@@ -246,6 +231,12 @@ export function LandingPage() {
       </div>
 
       <div className="landing-below">
+        <section id="choose-role" className="grid grid-3">
+          <RoleCard role="student" />
+          <RoleCard role="parent" />
+          <RoleCard role="tutor" />
+        </section>
+
         <section id="what-we-do" className="card landing-what-we-do">
           <div className="card-inner">
             <header className="landing-what-header">
@@ -276,12 +267,6 @@ export function LandingPage() {
               Pick your role below to get started—it only takes a minute.
             </p>
           </div>
-        </section>
-
-        <section id="choose-role" className="grid grid-3">
-          <RoleCard role="student" />
-          <RoleCard role="parent" />
-          <RoleCard role="tutor" />
         </section>
       </div>
     </main>

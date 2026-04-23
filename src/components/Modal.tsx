@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect } from 'react'
+import { Icons } from './icons'
 
 export function Modal({
   open,
@@ -31,8 +32,14 @@ export function Modal({
       <div className="modal">
         <div className="modal-header">
           <h3 style={{ fontSize: 18 }}>{title}</h3>
-          <button className="btn" onClick={onClose}>
-            Close
+          <button
+            type="button"
+            className="modal-close"
+            onClick={onClose}
+            aria-label="Close dialog"
+            title="Close"
+          >
+            {Icons.Close({ size: 18 })}
           </button>
         </div>
         <div className="modal-body">{children}</div>

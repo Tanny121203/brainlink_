@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { RolePill } from '../components/RolePill'
 import { Icons } from '../components/icons'
+import { Modal } from '../components/Modal'
+import { toast, useDocumentTitle } from '../components/Toast'
 import type { Role } from '../state/session'
 import { getPreferredRole, setPreferredRole, setSession } from '../state/session'
 
@@ -17,11 +19,13 @@ function roleAccent(role: Role) {
 }
 
 export function SignInPage() {
+  useDocumentTitle('Sign in · BrainLink')
   const nav = useNavigate()
   const initialRole = getPreferredRole() ?? 'student'
   const [role, setRole] = useState<Role>(initialRole)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [forgotOpen, setForgotOpen] = useState(false)
 
   const accent = useMemo(() => roleAccent(role), [role])
   const roleIcon =
@@ -101,15 +105,27 @@ export function SignInPage() {
             </div>
           </div>
 
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setForgotOpen(true)}
+            >
+              Forgot password?
+            </button>
+          </div>
+
           <div className="btn-row" style={{ marginTop: 14 }}>
             <button
               className={`btn ${accent.btn}`}
               onClick={() => {
+                const displayName = email.trim() ? email.split('@')[0] : 'Guest'
                 setSession({
                   role,
-                  displayName: email.trim() ? email.split('@')[0] : 'Guest',
+                  displayName,
                   email: email.trim() || 'guest@brainlink.local',
                 })
+                toast.success(`Welcome back, ${displayName}!`)
                 nav('/app')
               }}
             >
@@ -128,7 +144,75 @@ export function SignInPage() {
         </div>
       </div>
 
+      <ForgotPasswordModal
+        open={forgotOpen}
+        initialEmail={email}
+        onClose={() => setForgotOpen(false)}
+      />
     </main>
   )
 }
 
+function ForgotPasswordModal({
+  open,
+  initialEmail,
+  onClose,
+}: {
+  open: boolean
+  initialEmail: string
+  onClose: () => void
+}) {
+  const [resetEmail, setResetEmail] = useState(initialEmail)
+
+  const send = () => {
+    const target = resetEmail.trim() || 'your inbox'
+    toast.success(`Reset link sent to ${target}.`)
+    onClose()
+  }
+
+  return (
+    <Modal
+      open={open}
+      title="Reset your password"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-student"
+            onClick={send}
+          >
+            {Icons.Send({ size: 16 })}
+            Send reset link
+          </button>
+        </>
+      }
+    >
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Enter the email tied to your BrainLink account and we'll send you a
+        secure link to set a new password.
+      </p>
+      <div className="field">
+        <div className="label">Email</div>
+        <div className="input-group">
+          <span className="input-icon">{Icons.Mail({ size: 16 })}</span>
+          <input
+            className="input with-icon"
+            placeholder="you@example.com"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            autoComplete="email"
+            autoFocus
+          />
+        </div>
+      </div>
+      <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+        Heads up: this prototype doesn't actually send email yet — you'll just
+        see a confirmation toast.
+      </p>
+    </Modal>
+  )
+}

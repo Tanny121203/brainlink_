@@ -28,6 +28,105 @@ import { Icons } from '../components/icons'
 import { MessagesPanel } from './MessagesPage'
 import { NotesPanel } from './NotesPage'
 import { recordTutorSentOffer } from '../state/inbox'
+import { ProfileSection } from '../components/ProfileSection'
+import { AvailabilityGrid } from '../components/AvailabilityGrid'
+import { ReviewModal } from '../components/ReviewModal'
+import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
+import { toast } from '../components/Toast'
+import {
+  createAvailability,
+  loadAvailabilityFor,
+  saveAvailabilityFor,
+  toggleSlot,
+  type Availability,
+  type AvailabilityDay,
+  type AvailabilitySlotKey,
+} from '../state/availability'
+import {
+  addUserSession,
+  hideMockSession,
+  isUserBookedId,
+  loadHiddenMockIds,
+  loadUserSessions,
+  updateUserSession,
+  type UserSession,
+} from '../state/userSessions'
+import {
+  createRescheduleRequest,
+  updateRescheduleRequest,
+  type RescheduleRequest,
+} from '../state/rescheduleRequests'
+
+function prettyWhen(when: string): string {
+  const isoLike = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)
+  if (!isoLike) return when
+  const d = new Date(when)
+  if (Number.isNaN(d.getTime())) return when
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(d)
+  } catch {
+    return when
+  }
+}
+
+type UnifiedSession = {
+  id: string
+  title: string
+  tutorId: string
+  tutorName?: string
+  when: string
+  durationMins: number
+  mode: TutorProfile['mode']
+  status: StudentSession['status'] | 'Canceled' | 'Pending tutor approval'
+  isUserBooked: boolean
+}
+
+function userToUnified(s: UserSession): UnifiedSession {
+  return {
+    id: s.id,
+    title: `${s.subject} session with ${s.tutorName}`,
+    tutorId: s.tutorId,
+    tutorName: s.tutorName,
+    when: s.when,
+    durationMins: s.durationMins,
+    mode: s.mode,
+    status:
+      s.status === 'Canceled'
+        ? 'Canceled'
+        : s.status === 'Pending tutor approval'
+          ? 'Pending tutor approval'
+          : s.status === 'Completed'
+            ? 'Completed'
+            : 'Upcoming',
+    isUserBooked: true,
+  }
+}
+
+function mockToUnified(s: StudentSession): UnifiedSession {
+  return {
+    id: s.id,
+    title: s.title,
+    tutorId: s.tutorId,
+    when: s.when,
+    durationMins: s.durationMins,
+    mode: s.mode,
+    status: s.status,
+    isUserBooked: false,
+  }
+}
+
+function unifiedTone(s: UnifiedSession): 'good' | 'warn' | 'neutral' {
+  if (s.status === 'Upcoming') return 'neutral'
+  if (s.status === 'Completed') return 'good'
+  if (s.status === 'Pending tutor approval') return 'warn'
+  return 'warn'
+}
 
 function roleTheme(session: Session) {
   switch (session.role) {
@@ -82,11 +181,19 @@ function StatusPill({
 function TutorCard({
   t,
   existingTutor,
+  onBook,
 }: {
   t: TutorProfile
   /** When set, this tutor is already in the learner’s roster (student/parent). */
   existingTutor?: boolean
+  onBook?: (tutor: TutorProfile) => void
 }) {
+  const tutorAvailability = useMemo(
+    () => createAvailability(t.availability),
+    [t.availability]
+  )
+  const menuItems = tutorCardMenu(t, existingTutor, onBook)
+
   return (
     <div className="card">
       <div className="card-inner">
@@ -103,43 +210,134 @@ function TutorCard({
               </span>
             </p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            {existingTutor ? (
-              <span className="pill" title="Already in your tutors list">
-                Your tutor
-              </span>
-            ) : null}
-            <div className="pill">₱{t.hourlyRate}/hr</div>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 6,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {existingTutor ? (
+                <span className="pill" title="Already in your tutors list">
+                  Your tutor
+                </span>
+              ) : null}
+              <div className="pill">₱{t.hourlyRate}/hr</div>
+              <OverflowMenu items={menuItems} />
+            </div>
           </div>
         </div>
 
-        <div className="btn-row" style={{ marginTop: 10 }}>
-          <Chip text={t.level} />
-          {t.subjects.map((s) => (
-            <Chip key={s} text={s} />
-          ))}
-        </div>
+        <SubjectChips level={t.level} subjects={t.subjects} />
 
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          <button className="btn">
-            {Icons.CheckBook({ size: 16 })}
-            View profile
-          </button>
-          <button className="btn">
-            {Icons.Message({ size: 16 })}
-            Message
-          </button>
-          <button className="btn">
-            {Icons.Calendar({ size: 16 })}
-            {existingTutor ? 'Book' : 'Request session'}
-          </button>
+        <div style={{ marginTop: 12 }}>
+          <AvailabilityGrid
+            availability={tutorAvailability}
+            compact
+            title="When they’re open"
+          />
         </div>
       </div>
     </div>
   )
 }
 
-function YourTutorsStudentList() {
+function tutorCardMenu(
+  t: TutorProfile,
+  existingTutor: boolean | undefined,
+  onBook?: (tutor: TutorProfile) => void
+): OverflowMenuItem[] {
+  return [
+    {
+      key: 'profile',
+      label: 'View profile',
+      icon: Icons.CheckBook,
+      onSelect: () => {
+        /* View profile modal not wired yet in the prototype */
+      },
+    },
+    {
+      key: 'message',
+      label: 'Message',
+      icon: Icons.Message,
+      onSelect: () => {
+        /* Messages panel opens from the sidebar */
+      },
+    },
+    {
+      key: 'book',
+      label: existingTutor ? 'Book session' : 'Request session',
+      icon: Icons.Calendar,
+      onSelect: () => onBook?.(t),
+    },
+  ]
+}
+
+function SubjectChips({
+  level,
+  subjects,
+  maxVisible = 2,
+  leadingChips = [],
+}: {
+  level?: TutorProfile['level']
+  subjects: string[]
+  maxVisible?: number
+  leadingChips?: string[]
+}) {
+  const visible = subjects.slice(0, maxVisible)
+  const overflow = subjects.slice(maxVisible)
+  const overflowLabel = overflow.join(', ')
+  return (
+    <div className="btn-row" style={{ marginTop: 10 }}>
+      {leadingChips.map((c) => (
+        <Chip key={`lead-${c}`} text={c} />
+      ))}
+      {level ? <Chip text={level} /> : null}
+      {visible.map((s) => (
+        <Chip key={s} text={s} />
+      ))}
+      {overflow.length > 0 ? (
+        <span
+          className="pill"
+          title={overflowLabel}
+          aria-label={`More subjects: ${overflowLabel}`}
+        >
+          +{overflow.length} more
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function tutorListCardMenu(
+  t: TutorProfile,
+  onBook?: (tutor: TutorProfile) => void
+): OverflowMenuItem[] {
+  return [
+    {
+      key: 'message',
+      label: 'Message',
+      icon: Icons.Message,
+      onSelect: () => {
+        /* Messages panel opens from the sidebar */
+      },
+    },
+    {
+      key: 'book',
+      label: 'Book session',
+      icon: Icons.Calendar,
+      onSelect: () => onBook?.(t),
+    },
+  ]
+}
+
+function YourTutorsStudentList({
+  onBook,
+}: {
+  onBook?: (tutor: TutorProfile) => void
+}) {
   return (
     <section className="card">
       <div className="card-inner">
@@ -155,7 +353,7 @@ function YourTutorsStudentList() {
               <div
                 key={rel.tutorId}
                 className="card"
-                style={{ background: 'rgba(255,255,255,0.62)' }}
+                style={{ background: 'var(--surface-soft)' }}
               >
                 <div className="card-inner">
                   <div className="card-header">
@@ -165,26 +363,25 @@ function YourTutorsStudentList() {
                         {rel.relationship} • Since {rel.since}
                       </p>
                     </div>
-                    <span className="pill">
-                      {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="pill">
+                        {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
+                      </span>
+                      <OverflowMenu items={tutorListCardMenu(t, onBook)} />
+                    </div>
                   </div>
-                  <div className="btn-row">
-                    <Chip text={t.mode} />
-                    <Chip text={t.level} />
-                    {t.subjects.slice(0, 2).map((s) => (
-                      <Chip key={s} text={s} />
-                    ))}
-                  </div>
-                  <div className="btn-row" style={{ marginTop: 10 }}>
-                    <button className="btn">
-                      {Icons.Message({ size: 16 })}
-                      Message
-                    </button>
-                    <button className="btn">
-                      {Icons.Calendar({ size: 16 })}
-                      Book
-                    </button>
+                  <SubjectChips
+                    level={t.level}
+                    subjects={t.subjects}
+                    maxVisible={2}
+                    leadingChips={[t.mode]}
+                  />
+                  <div style={{ marginTop: 10 }}>
+                    <AvailabilityGrid
+                      availability={createAvailability(t.availability)}
+                      compact
+                      title="When they’re open"
+                    />
                   </div>
                 </div>
               </div>
@@ -207,6 +404,7 @@ function StudentTutorsBrowseHub({
   setMode,
   filteredTutors,
   existingTutorIds,
+  onBook,
 }: {
   tutorView: 'discover' | 'my'
   setTutorView: (v: 'discover' | 'my') => void
@@ -218,7 +416,13 @@ function StudentTutorsBrowseHub({
   setMode: (v: 'All' | TutorProfile['mode']) => void
   filteredTutors: TutorProfile[]
   existingTutorIds: Set<string>
+  onBook?: (tutor: TutorProfile) => void
 }) {
+  const discoveryTutors = useMemo(
+    () => filteredTutors.filter((t) => !existingTutorIds.has(t.id)),
+    [filteredTutors, existingTutorIds]
+  )
+
   return (
     <section className="grid" style={{ gap: 14 }}>
       <div className="card">
@@ -226,10 +430,16 @@ function StudentTutorsBrowseHub({
           <div className="label" style={{ marginBottom: 8 }}>
             Tutors
           </div>
-          <div className="nav-group">
+          <div
+            className="tab-switch"
+            role="tablist"
+            aria-label="Tutors view"
+          >
             <button
               type="button"
-              className={`btn nav-item ${tutorView === 'discover' ? 'is-active' : ''}`}
+              role="tab"
+              aria-selected={tutorView === 'discover'}
+              className={`tab-switch-btn ${tutorView === 'discover' ? 'is-active' : ''}`}
               data-accent="student"
               onClick={() => setTutorView('discover')}
             >
@@ -238,7 +448,9 @@ function StudentTutorsBrowseHub({
             </button>
             <button
               type="button"
-              className={`btn nav-item ${tutorView === 'my' ? 'is-active' : ''}`}
+              role="tab"
+              aria-selected={tutorView === 'my'}
+              className={`tab-switch-btn ${tutorView === 'my' ? 'is-active' : ''}`}
               data-accent="student"
               onClick={() => setTutorView('my')}
             >
@@ -250,19 +462,20 @@ function StudentTutorsBrowseHub({
       </div>
 
       {tutorView === 'my' ? (
-        <YourTutorsStudentList />
+        <YourTutorsStudentList onBook={onBook} />
       ) : (
         <BrowseTutorsDiscover
           title="Browse tutors"
-          subtitle="Search by subject, place, or name. Tutors you already work with are labeled in results."
+          subtitle="Search by subject, place, or name. Tutors you already work with are shown under Your tutors."
           query={query}
           setQuery={setQuery}
           level={level}
           setLevel={setLevel}
           mode={mode}
           setMode={setMode}
-          filteredTutors={filteredTutors}
-          existingTutorIds={existingTutorIds}
+          filteredTutors={discoveryTutors}
+          existingTutorIds={new Set()}
+          onBook={onBook}
         />
       )}
     </section>
@@ -280,6 +493,7 @@ function BrowseTutorsDiscover({
   setMode,
   filteredTutors,
   existingTutorIds,
+  onBook,
 }: {
   title: string
   subtitle: string
@@ -292,6 +506,7 @@ function BrowseTutorsDiscover({
   filteredTutors: TutorProfile[]
   /** Tutor ids already linked on the account (shown with a “Your tutor” badge). */
   existingTutorIds: Set<string>
+  onBook?: (tutor: TutorProfile) => void
 }) {
   return (
     <section className="grid" style={{ gap: 14 }}>
@@ -370,17 +585,12 @@ function BrowseTutorsDiscover({
             key={t.id}
             t={t}
             existingTutor={existingTutorIds.has(t.id)}
+            onBook={onBook}
           />
         ))}
       </section>
     </section>
   )
-}
-
-function sessionTone(s: StudentSession): 'good' | 'warn' | 'neutral' {
-  if (s.status === 'Upcoming') return 'neutral'
-  if (s.status === 'Completed') return 'good'
-  return 'warn'
 }
 
 function todoTone(t: StudentTodo): 'good' | 'warn' | 'neutral' {
@@ -403,7 +613,12 @@ export function DashboardPage({ session }: { session: Session }) {
       : undefined
   const tutorProfile =
     session.role === 'tutor'
-      ? (session.profile as unknown as { subjects?: string; yearsExperience?: string; city?: string } | undefined)
+      ? (session.profile as unknown as {
+          subjects?: string
+          yearsExperience?: string
+          city?: string
+          photoDataUrl?: string
+        } | undefined)
       : undefined
 
   type Section =
@@ -411,6 +626,7 @@ export function DashboardPage({ session }: { session: Session }) {
     | 'student.sessions'
     | 'student.browse'
     | 'student.todos'
+    | 'student.profile'
     | 'parent.overview'
     | 'parent.find'
     | 'parent.sessions'
@@ -421,6 +637,7 @@ export function DashboardPage({ session }: { session: Session }) {
     | 'tutor.offers'
     | 'tutor.clients'
     | 'tutor.sessions'
+    | 'tutor.profile'
 
   const defaultSection: Section =
     session.role === 'student'
@@ -453,6 +670,84 @@ export function DashboardPage({ session }: { session: Session }) {
     null
   )
 
+  // Live session version tick — bumped whenever user sessions or hidden mock ids change
+  const [sessionsVersion, setSessionsVersion] = useState(0)
+  const bumpSessions = () => setSessionsVersion((v) => v + 1)
+
+  // Booking modal
+  const [bookingTutor, setBookingTutor] = useState<TutorProfile | null>(null)
+  const [bookingWhen, setBookingWhen] = useState('')
+  const [bookingSubject, setBookingSubject] = useState('')
+  const [bookingDuration, setBookingDuration] = useState('60')
+  const [bookingMode, setBookingMode] =
+    useState<TutorProfile['mode']>('Online')
+
+  // Reschedule modal
+  const [rescheduleTarget, setRescheduleTarget] =
+    useState<UnifiedSession | null>(null)
+  const [rescheduleWhen, setRescheduleWhen] = useState('')
+  const [rescheduleNote, setRescheduleNote] = useState('')
+
+  // Cancel confirmation
+  const [cancelTarget, setCancelTarget] = useState<UnifiedSession | null>(null)
+
+  // Review modal
+  const [reviewTarget, setReviewTarget] = useState<{
+    tutorId: string
+    tutorName: string
+  } | null>(null)
+
+  // Tutor counter-propose modal
+  const [counterRequestId, setCounterRequestId] = useState<string | null>(null)
+  const [counterWhen, setCounterWhen] = useState('')
+  const [requestsVersion, setRequestsVersion] = useState(0)
+  const bumpRequests = () => setRequestsVersion((v) => v + 1)
+
+  // Tutor's editable availability (keyed to their session email)
+  // We keep a "saved" snapshot and a "draft" the tutor edits. They only
+  // persist on explicit Save, and can Discard to revert.
+  const [savedAvailability, setSavedAvailability] = useState<Availability>(
+    () =>
+      session.role === 'tutor'
+        ? loadAvailabilityFor(session.email)
+        : createAvailability()
+  )
+  const [availability, setAvailability] = useState<Availability>(
+    savedAvailability
+  )
+
+  useEffect(() => {
+    if (session.role === 'tutor') {
+      const fresh = loadAvailabilityFor(session.email)
+      setSavedAvailability(fresh)
+      setAvailability(fresh)
+    }
+  }, [session.email, session.role])
+
+  function handleToggleAvailability(
+    day: AvailabilityDay,
+    slot: AvailabilitySlotKey
+  ) {
+    setAvailability((prev) => toggleSlot(prev, day, slot))
+  }
+
+  const availabilityDirty = useMemo(() => {
+    const a = Array.from(availability).sort().join('|')
+    const b = Array.from(savedAvailability).sort().join('|')
+    return a !== b
+  }, [availability, savedAvailability])
+
+  function saveAvailability() {
+    saveAvailabilityFor(session.email, availability)
+    setSavedAvailability(new Set(availability))
+    toast.success('Availability saved.')
+  }
+
+  function discardAvailability() {
+    setAvailability(new Set(savedAvailability))
+    toast.info('Changes discarded.')
+  }
+
   const filteredTutors = useMemo(() => {
     const q = query.trim().toLowerCase()
     return tutorProfiles.filter((t) => {
@@ -471,10 +766,242 @@ export function DashboardPage({ session }: { session: Session }) {
     () => new Set(studentTutors.map((r) => r.tutorId)),
     []
   )
-  const parentExistingTutorIds = useMemo(
+  const parentExistingTutorIds = useMemo<Set<string>>(
     () => new Set(parentTutors.map((r) => r.tutorId)),
     []
   )
+
+  const mergedStudentSessions = useMemo<UnifiedSession[]>(() => {
+    void sessionsVersion
+    const hidden = loadHiddenMockIds()
+    const mock = studentSessions
+      .filter((s) => !hidden.has(s.id))
+      .map(mockToUnified)
+    const mine = loadUserSessions()
+      .filter(
+        (s) =>
+          s.bookedForRole === 'student' && s.bookedByEmail === session.email
+      )
+      .map(userToUnified)
+    return [...mine, ...mock]
+  }, [sessionsVersion, session.email])
+
+  const mergedParentSessions = useMemo<UnifiedSession[]>(() => {
+    void sessionsVersion
+    const hidden = loadHiddenMockIds()
+    const mock = parentSessions
+      .filter((s) => !hidden.has(s.id))
+      .map(mockToUnified)
+    const mine = loadUserSessions()
+      .filter(
+        (s) => s.bookedForRole === 'parent' && s.bookedByEmail === session.email
+      )
+      .map(userToUnified)
+    return [...mine, ...mock]
+  }, [sessionsVersion, session.email])
+
+  // Prototype note: tutor↔session ownership is loose in the mock data, so we
+  // surface every reschedule request for the tutor view (sorted latest-first).
+  const allPendingRequests = useMemo<RescheduleRequest[]>(() => {
+    void requestsVersion
+    if (session.role !== 'tutor') return []
+    try {
+      const raw = localStorage.getItem('brainlink.rescheduleRequests.v1')
+      if (!raw) return []
+      const list = JSON.parse(raw) as RescheduleRequest[]
+      if (!Array.isArray(list)) return []
+      return [...list].sort((a, b) => b.updatedAt - a.updatedAt)
+    } catch {
+      return []
+    }
+  }, [requestsVersion, session.role])
+
+  function openBookingModal(tutor: TutorProfile) {
+    setBookingTutor(tutor)
+    setBookingSubject(tutor.subjects[0] ?? '')
+    setBookingDuration('60')
+    setBookingMode(tutor.mode)
+    setBookingWhen('')
+  }
+
+  function closeBookingModal() {
+    setBookingTutor(null)
+  }
+
+  function confirmBooking() {
+    if (!bookingTutor) return
+    if (!bookingWhen) {
+      toast.error('Please pick a date and time.')
+      return
+    }
+    if (!bookingSubject.trim()) {
+      toast.error('Please choose a subject.')
+      return
+    }
+    const duration = Math.max(15, Number(bookingDuration) || 60)
+    addUserSession({
+      tutorId: bookingTutor.id,
+      tutorName: bookingTutor.name,
+      subject: bookingSubject,
+      when: bookingWhen,
+      durationMins: duration,
+      mode: bookingMode,
+      status: 'Upcoming',
+      bookedByEmail: session.email,
+      bookedForRole: session.role,
+    })
+    toast.success(
+      `Session booked with ${bookingTutor.name} for ${prettyWhen(bookingWhen)}.`
+    )
+    closeBookingModal()
+    bumpSessions()
+  }
+
+  function openReschedule(target: UnifiedSession) {
+    setRescheduleTarget(target)
+    setRescheduleWhen('')
+    setRescheduleNote('')
+  }
+
+  function closeReschedule() {
+    setRescheduleTarget(null)
+  }
+
+  function confirmReschedule() {
+    if (!rescheduleTarget) return
+    if (!rescheduleWhen) {
+      toast.error('Please pick a new date and time.')
+      return
+    }
+
+    const tutorName =
+      rescheduleTarget.tutorName ??
+      tutorProfiles.find((t) => t.id === rescheduleTarget.tutorId)?.name ??
+      'your tutor'
+
+    let affectedSessionId = rescheduleTarget.id
+
+    if (rescheduleTarget.isUserBooked) {
+      updateUserSession(rescheduleTarget.id, {
+        status: 'Pending tutor approval',
+      })
+    } else {
+      // Hide the mock session and create a replacement user session marked pending
+      hideMockSession(rescheduleTarget.id)
+      const created = addUserSession({
+        tutorId: rescheduleTarget.tutorId,
+        tutorName,
+        subject: rescheduleTarget.title,
+        when: rescheduleTarget.when,
+        durationMins: rescheduleTarget.durationMins,
+        mode: rescheduleTarget.mode,
+        status: 'Pending tutor approval',
+        bookedByEmail: session.email,
+        bookedForRole: session.role,
+      })
+      affectedSessionId = created.id
+    }
+
+    createRescheduleRequest({
+      sessionId: affectedSessionId,
+      tutorId: rescheduleTarget.tutorId,
+      requesterEmail: session.email,
+      requesterName: session.displayName,
+      originalWhen: rescheduleTarget.when,
+      requestedWhen: rescheduleWhen,
+      note: rescheduleNote.trim() || undefined,
+    })
+
+    toast.success(
+      `Reschedule request sent to ${tutorName}. They’ll confirm or propose another time.`
+    )
+    closeReschedule()
+    bumpSessions()
+    bumpRequests()
+  }
+
+  function confirmCancel() {
+    if (!cancelTarget) return
+    if (cancelTarget.isUserBooked) {
+      updateUserSession(cancelTarget.id, { status: 'Canceled' })
+    } else {
+      hideMockSession(cancelTarget.id)
+    }
+    toast.info('Session canceled.')
+    setCancelTarget(null)
+    bumpSessions()
+  }
+
+  function tutorDecision(
+    req: RescheduleRequest,
+    decision: 'Accepted' | 'Declined'
+  ) {
+    updateRescheduleRequest(req.id, { status: decision })
+    if (decision === 'Accepted' && isUserBookedId(req.sessionId)) {
+      updateUserSession(req.sessionId, {
+        status: 'Upcoming',
+        when: req.requestedWhen,
+      })
+    }
+    toast.success(
+      decision === 'Accepted'
+        ? 'Reschedule accepted.'
+        : 'Reschedule declined.'
+    )
+    bumpRequests()
+    bumpSessions()
+  }
+
+  function submitCounter() {
+    if (!counterRequestId) return
+    if (!counterWhen) {
+      toast.error('Please pick a counter time.')
+      return
+    }
+    updateRescheduleRequest(counterRequestId, {
+      status: 'Counter proposed',
+      counterWhen,
+    })
+    toast.info('Counter-proposal sent to the learner.')
+    setCounterRequestId(null)
+    setCounterWhen('')
+    bumpRequests()
+  }
+
+  function makeSessionMenuItems(s: UnifiedSession): OverflowMenuItem[] {
+    const items: OverflowMenuItem[] = []
+    const isActionable = s.status === 'Upcoming'
+    items.push({
+      key: 'reschedule',
+      label: 'Reschedule',
+      icon: Icons.Calendar,
+      onSelect: () => openReschedule(s),
+      disabled: !isActionable,
+    })
+    items.push({
+      key: 'cancel',
+      label: 'Cancel session',
+      icon: Icons.Close,
+      destructive: true,
+      onSelect: () => setCancelTarget(s),
+      disabled: !isActionable,
+    })
+    if (s.status === 'Completed') {
+      items.push({
+        key: 'rate',
+        label: 'Rate tutor',
+        icon: Icons.Star,
+        onSelect: () => {
+          const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+          setReviewTarget({
+            tutorId: s.tutorId,
+            tutorName: tutor?.name ?? s.tutorName ?? 'Tutor',
+          })
+        },
+      })
+    }
+    return items
+  }
 
   const detailsNeed = detailsNeedId
     ? studentNeeds.find((s) => s.id === detailsNeedId) ?? null
@@ -497,6 +1024,7 @@ export function DashboardPage({ session }: { session: Session }) {
           { key: 'student.sessions', label: 'Sessions', icon: Icons.Calendar },
           { key: 'student.browse', label: 'Browse tutors', icon: Icons.Search },
           { key: 'student.todos', label: 'To‑dos', icon: Icons.CheckBook },
+          { key: 'student.profile', label: 'My profile', icon: Icons.User },
         ]
       : session.role === 'parent'
         ? [
@@ -505,13 +1033,14 @@ export function DashboardPage({ session }: { session: Session }) {
             { key: 'parent.tutors', label: 'Tutors', icon: Icons.Users },
             { key: 'parent.todos', label: 'To‑dos', icon: Icons.CheckBook },
             { key: 'parent.find', label: 'Find tutors', icon: Icons.Search },
-            { key: 'parent.profile', label: 'Student profile', icon: Icons.Cap },
+            { key: 'parent.profile', label: 'My profile', icon: Icons.User },
           ]
         : [
             { key: 'tutor.requests', label: 'Requests', icon: Icons.Users },
             { key: 'tutor.offers', label: 'Offers', icon: Icons.Send },
             { key: 'tutor.clients', label: 'Clients', icon: Icons.Cap },
             { key: 'tutor.sessions', label: 'Sessions', icon: Icons.Calendar },
+            { key: 'tutor.profile', label: 'My profile', icon: Icons.User },
           ]
 
   return (
@@ -569,9 +1098,17 @@ export function DashboardPage({ session }: { session: Session }) {
                 <div
                   className="avatar"
                   aria-hidden="true"
-                  style={{
-                    background: `linear-gradient(135deg, ${theme.soft}, ${theme.strong})`,
-                  }}
+                  style={
+                    tutorProfile?.photoDataUrl
+                      ? {
+                          backgroundImage: `url(${tutorProfile.photoDataUrl})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }
+                      : {
+                          background: `linear-gradient(135deg, ${theme.soft}, ${theme.strong})`,
+                        }
+                  }
                 />
                 <div style={{ minWidth: 0 }}>
                   <div className="profile-name" title={session.displayName}>
@@ -669,13 +1206,17 @@ export function DashboardPage({ session }: { session: Session }) {
                     right={<span className="pill">Student</span>}
                   />
                   <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                    {studentSessions.map((s) => {
+                    {mergedStudentSessions.length === 0 ? (
+                      <p className="muted">No sessions yet. Book a tutor to get started.</p>
+                    ) : null}
+                    {mergedStudentSessions.map((s) => {
                       const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
                           key={s.id}
                           className="card"
-                          style={{ background: 'rgba(255,255,255,0.62)' }}
+                          style={{ background: 'var(--surface-soft)' }}
                         >
                           <div className="card-inner">
                             <div className="card-header">
@@ -689,13 +1230,16 @@ export function DashboardPage({ session }: { session: Session }) {
                                       gap: 6,
                                     }}
                                   >
-                                    {Icons.Calendar({ size: 14 })} {s.when}
+                                    {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
                                   • {s.durationMins} min • {s.mode}
-                                  {tutor ? ` • Tutor: ${tutor.name}` : ''}
+                                  {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
-                              <StatusPill text={s.status} tone={sessionTone(s)} />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <StatusPill text={s.status} tone={unifiedTone(s)} />
+                                <OverflowMenu items={menuItems} />
+                              </div>
                             </div>
                             <div className="btn-row" style={{ marginTop: 10 }}>
                               <button className="btn">
@@ -706,10 +1250,12 @@ export function DashboardPage({ session }: { session: Session }) {
                                 {Icons.CheckBook({ size: 16 })}
                                 Notes
                               </button>
-                              <button className="btn btn-primary btn-student">
-                                {Icons.Send({ size: 16 })}
-                                Join
-                              </button>
+                              {s.status === 'Upcoming' ? (
+                                <button className="btn btn-primary btn-student">
+                                  {Icons.Send({ size: 16 })}
+                                  Join
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -730,7 +1276,10 @@ export function DashboardPage({ session }: { session: Session }) {
                 setMode={setMode}
                 filteredTutors={filteredTutors}
                 existingTutorIds={studentExistingTutorIds}
+                onBook={openBookingModal}
               />
+            ) : section === 'student.profile' ? (
+              <ProfileSection session={session} />
             ) : section === 'student.todos' ? (
               <section className="card">
                 <div className="card-inner">
@@ -848,13 +1397,17 @@ export function DashboardPage({ session }: { session: Session }) {
                     }
                   />
                   <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                    {parentSessions.map((s) => {
+                    {mergedParentSessions.length === 0 ? (
+                      <p className="muted">No sessions yet. Book a tutor to schedule one.</p>
+                    ) : null}
+                    {mergedParentSessions.map((s) => {
                       const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
                           key={s.id}
                           className="card"
-                          style={{ background: 'rgba(255,255,255,0.62)' }}
+                          style={{ background: 'var(--surface-soft)' }}
                         >
                           <div className="card-inner">
                             <div className="card-header">
@@ -862,13 +1415,16 @@ export function DashboardPage({ session }: { session: Session }) {
                                 <h3 style={{ fontSize: 16 }}>{s.title}</h3>
                                 <p className="muted" style={{ marginTop: 6 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    {Icons.Calendar({ size: 14 })} {s.when}
+                                    {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
                                   • {s.durationMins} min • {s.mode}
-                                  {tutor ? ` • Tutor: ${tutor.name}` : ''}
+                                  {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
-                              <StatusPill text={s.status} tone={sessionTone(s)} />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <StatusPill text={s.status} tone={unifiedTone(s)} />
+                                <OverflowMenu items={menuItems} />
+                              </div>
                             </div>
                             <div className="btn-row" style={{ marginTop: 10 }}>
                               <button className="btn">
@@ -878,10 +1434,6 @@ export function DashboardPage({ session }: { session: Session }) {
                               <button className="btn">
                                 {Icons.CheckBook({ size: 16 })}
                                 Notes
-                              </button>
-                              <button className="btn">
-                                {Icons.Send({ size: 16 })}
-                                Reschedule
                               </button>
                             </div>
                           </div>
@@ -912,7 +1464,7 @@ export function DashboardPage({ session }: { session: Session }) {
                         <div
                           key={rel.tutorId}
                           className="card"
-                          style={{ background: 'rgba(255,255,255,0.62)' }}
+                          style={{ background: 'var(--surface-soft)' }}
                         >
                           <div className="card-inner">
                             <div className="card-header">
@@ -922,26 +1474,25 @@ export function DashboardPage({ session }: { session: Session }) {
                                   {rel.relationship} • Since {rel.since}
                                 </p>
                               </div>
-                              <span className="pill">
-                                {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span className="pill">
+                                  {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
+                                </span>
+                                <OverflowMenu items={tutorListCardMenu(t, openBookingModal)} />
+                              </div>
                             </div>
-                            <div className="btn-row">
-                              <Chip text={t.mode} />
-                              <Chip text={t.level} />
-                              {t.subjects.slice(0, 2).map((s) => (
-                                <Chip key={s} text={s} />
-                              ))}
-                            </div>
-                            <div className="btn-row" style={{ marginTop: 10 }}>
-                              <button className="btn">
-                                {Icons.Message({ size: 16 })}
-                                Message
-                              </button>
-                              <button className="btn">
-                                {Icons.Calendar({ size: 16 })}
-                                Book
-                              </button>
+                            <SubjectChips
+                              level={t.level}
+                              subjects={t.subjects}
+                              maxVisible={2}
+                              leadingChips={[t.mode]}
+                            />
+                            <div style={{ marginTop: 10 }}>
+                              <AvailabilityGrid
+                                availability={createAvailability(t.availability)}
+                                compact
+                                title="When they’re open"
+                              />
                             </div>
                           </div>
                         </div>
@@ -992,54 +1543,22 @@ export function DashboardPage({ session }: { session: Session }) {
                 </div>
               </section>
             ) : section === 'parent.profile' ? (
-              <section className="grid" style={{ gap: 14 }}>
-                <div className="card">
-                  <div className="card-inner">
-                    <SectionTitle
-                      title="Student profile"
-                      subtitle="Overview of your child and learning context."
-                      right={<span className="pill">Parent</span>}
-                    />
-                    <div className="grid grid-2" style={{ marginTop: 12 }}>
-                      <div className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
-                        <div className="card-inner">
-                          <div className="label">Child</div>
-                          <p className="subtle" style={{ marginTop: 6 }}>
-                            {parentProfile?.childName ?? parentChild.name}
-                          </p>
-                          <p className="muted" style={{ marginTop: 6 }}>
-                            {parentProfile?.childYearLevel ?? parentChild.yearLevel}
-                            {parentProfile?.city ? ` • ${parentProfile.city}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
-                        <div className="card-inner">
-                          <div className="label">Next session</div>
-                          <p className="subtle" style={{ marginTop: 6 }}>
-                            {parentSessions.find((s) => s.status === 'Upcoming')?.title ?? '—'}
-                          </p>
-                          <p className="muted" style={{ marginTop: 6 }}>
-                            {parentSessions.find((s) => s.status === 'Upcoming')?.when ?? ''}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+              <ProfileSection session={session} />
             ) : section === 'parent.find' ? (
               <BrowseTutorsDiscover
                 title="Find a tutor"
-                subtitle="Search by subject, location, or tutor name. Tutors already working with your child are labeled."
+                subtitle="Search by subject, location, or tutor name. Tutors already working with your child are shown under Tutors."
                 query={query}
                 setQuery={setQuery}
                 level={level}
                 setLevel={setLevel}
                 mode={mode}
                 setMode={setMode}
-                filteredTutors={filteredTutors}
-                existingTutorIds={parentExistingTutorIds}
+                filteredTutors={filteredTutors.filter(
+                  (t) => !parentExistingTutorIds.has(t.id)
+                )}
+                existingTutorIds={new Set()}
+                onBook={openBookingModal}
               />
             ) : (
               <section className="card">
@@ -1253,49 +1772,188 @@ export function DashboardPage({ session }: { session: Session }) {
                 </div>
               </section>
             ) : section === 'tutor.sessions' ? (
-              <section className="card">
-                <div className="card-inner">
-                  <SectionTitle
-                    title="Sessions"
-                    subtitle="Your upcoming schedule."
-                    right={<span className="pill">{tutorSessions.length} items</span>}
-                  />
-                  <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                    {tutorSessions.map((s: TutorSession) => {
-                      const client = tutorClients.find((c) => c.id === s.withClientId)
-                      return (
-                        <div
-                          key={s.id}
-                          className="card"
-                          style={{ background: 'rgba(255,255,255,0.62)' }}
-                        >
-                          <div className="card-inner">
-                            <div className="card-header">
-                              <div>
-                                <h3 style={{ fontSize: 16 }}>
-                                  {s.subject}
-                                  {client ? ` • ${client.name}` : ''}
-                                </h3>
-                                <p className="muted" style={{ marginTop: 6 }}>
-                                  {s.when} • {s.durationMins} min • {s.mode}
-                                </p>
+              <section className="grid" style={{ gap: 14 }}>
+                {allPendingRequests.length > 0 ? (
+                  <div className="card">
+                    <div className="card-inner">
+                      <SectionTitle
+                        title="Reschedule requests"
+                        subtitle="Learners proposing new times for their sessions."
+                        right={
+                          <span className="pill">
+                            {allPendingRequests.filter((r) => r.status === 'Pending').length} pending
+                          </span>
+                        }
+                      />
+                      <div className="grid" style={{ gap: 10, marginTop: 12 }}>
+                        {allPendingRequests.map((r) => (
+                          <div
+                            key={r.id}
+                            className="card"
+                            style={{ background: 'var(--surface-soft)' }}
+                          >
+                            <div className="card-inner">
+                              <div className="card-header">
+                                <div>
+                                  <h3 style={{ fontSize: 16 }}>
+                                    From {r.requesterName}
+                                  </h3>
+                                  <p className="muted" style={{ marginTop: 6 }}>
+                                    Original: {prettyWhen(r.originalWhen)} →
+                                    Proposed: {prettyWhen(r.requestedWhen)}
+                                  </p>
+                                  {r.note ? (
+                                    <p className="subtle" style={{ marginTop: 6 }}>
+                                      “{r.note}”
+                                    </p>
+                                  ) : null}
+                                  {r.status === 'Counter proposed' && r.counterWhen ? (
+                                    <p className="muted" style={{ marginTop: 6 }}>
+                                      You proposed: {prettyWhen(r.counterWhen)}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <StatusPill
+                                  text={r.status}
+                                  tone={
+                                    r.status === 'Accepted'
+                                      ? 'good'
+                                      : r.status === 'Declined'
+                                        ? 'warn'
+                                        : 'neutral'
+                                  }
+                                />
                               </div>
-                              <StatusPill text={s.status} tone={s.status === 'Completed' ? 'good' : 'neutral'} />
-                            </div>
-                            <div className="btn-row" style={{ marginTop: 10 }}>
-                              <button className="btn">
-                                {Icons.Message({ size: 16 })}
-                                Message
-                              </button>
-                              <button className="btn btn-primary btn-tutor">
-                                {Icons.Send({ size: 16 })}
-                                Start
-                              </button>
+                              {r.status === 'Pending' ? (
+                                <div className="btn-row" style={{ marginTop: 10 }}>
+                                  <button
+                                    className="btn btn-primary btn-tutor"
+                                    onClick={() => tutorDecision(r, 'Accepted')}
+                                  >
+                                    {Icons.CheckCircle({ size: 16 })}
+                                    Accept
+                                  </button>
+                                  <button
+                                    className="btn"
+                                    onClick={() => tutorDecision(r, 'Declined')}
+                                  >
+                                    {Icons.Close({ size: 16 })}
+                                    Decline
+                                  </button>
+                                  <button
+                                    className="btn"
+                                    onClick={() => {
+                                      setCounterRequestId(r.id)
+                                      setCounterWhen('')
+                                    }}
+                                  >
+                                    {Icons.Calendar({ size: 16 })}
+                                    Counter propose
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="card">
+                  <div className="card-inner">
+                    <SectionTitle
+                      title="Sessions"
+                      subtitle="Your upcoming schedule."
+                      right={<span className="pill">{tutorSessions.length} items</span>}
+                    />
+                    <div className="grid" style={{ gap: 10, marginTop: 12 }}>
+                      {tutorSessions.map((s: TutorSession) => {
+                        const client = tutorClients.find((c) => c.id === s.withClientId)
+                        return (
+                          <div
+                            key={s.id}
+                            className="card"
+                            style={{ background: 'var(--surface-soft)' }}
+                          >
+                            <div className="card-inner">
+                              <div className="card-header">
+                                <div>
+                                  <h3 style={{ fontSize: 16 }}>
+                                    {s.subject}
+                                    {client ? ` • ${client.name}` : ''}
+                                  </h3>
+                                  <p className="muted" style={{ marginTop: 6 }}>
+                                    {s.when} • {s.durationMins} min • {s.mode}
+                                  </p>
+                                </div>
+                                <StatusPill text={s.status} tone={s.status === 'Completed' ? 'good' : 'neutral'} />
+                              </div>
+                              <div className="btn-row" style={{ marginTop: 10 }}>
+                                <button className="btn">
+                                  {Icons.Message({ size: 16 })}
+                                  Message
+                                </button>
+                                <button className="btn btn-primary btn-tutor">
+                                  {Icons.Send({ size: 16 })}
+                                  Start
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : section === 'tutor.profile' ? (
+              <section className="grid" style={{ gap: 14 }}>
+                <ProfileSection session={session} />
+                <div className="card">
+                  <div className="card-inner">
+                    <SectionTitle
+                      title="Weekly availability"
+                      subtitle="Tap slots to mark when you’re open for sessions."
+                      right={
+                        <span
+                          className="pill"
+                          title={
+                            availabilityDirty
+                              ? 'You have unsaved changes'
+                              : 'All changes saved'
+                          }
+                        >
+                          {availabilityDirty ? 'Unsaved changes' : 'Saved'}
+                        </span>
+                      }
+                    />
+                    <div style={{ marginTop: 12 }}>
+                      <AvailabilityGrid
+                        availability={availability}
+                        editable
+                        onToggle={handleToggleAvailability}
+                        title="Your availability"
+                      />
+                    </div>
+                    <div className="btn-row" style={{ marginTop: 12 }}>
+                      <button
+                        className="btn btn-primary btn-tutor"
+                        onClick={saveAvailability}
+                        disabled={!availabilityDirty}
+                      >
+                        {Icons.CheckCircle({ size: 16 })}
+                        Save changes
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={discardAvailability}
+                        disabled={!availabilityDirty}
+                      >
+                        {Icons.Close({ size: 16 })}
+                        Discard
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1531,6 +2189,239 @@ export function DashboardPage({ session }: { session: Session }) {
           </div>
         ) : null}
       </Modal>
+
+      <Modal
+        open={!!bookingTutor}
+        title={bookingTutor ? `Book a session with ${bookingTutor.name}` : 'Book a session'}
+        onClose={closeBookingModal}
+        footer={
+          bookingTutor ? (
+            <>
+              <button className="btn" onClick={closeBookingModal}>
+                Cancel
+              </button>
+              <button
+                className={`btn btn-primary ${
+                  session.role === 'tutor'
+                    ? 'btn-tutor'
+                    : session.role === 'parent'
+                      ? 'btn-parent'
+                      : 'btn-student'
+                }`}
+                onClick={confirmBooking}
+              >
+                {Icons.Calendar({ size: 16 })}
+                Confirm booking
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {bookingTutor ? (
+          <div className="grid" style={{ gap: 12 }}>
+            <p className="muted">
+              {bookingTutor.mode} • ₱{bookingTutor.hourlyRate}/hr •{' '}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {Icons.Star({ size: 14 })} {bookingTutor.rating.toFixed(1)}
+              </span>
+            </p>
+            <div className="field">
+              <label className="label" htmlFor="booking-when">When</label>
+              <input
+                id="booking-when"
+                type="datetime-local"
+                className="input"
+                value={bookingWhen}
+                onChange={(e) => setBookingWhen(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="booking-subject">Subject</label>
+              <select
+                id="booking-subject"
+                className="input"
+                value={bookingSubject}
+                onChange={(e) => setBookingSubject(e.target.value)}
+              >
+                {bookingTutor.subjects.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-2" style={{ gap: 12 }}>
+              <div className="field">
+                <label className="label" htmlFor="booking-duration">Duration (min)</label>
+                <input
+                  id="booking-duration"
+                  type="number"
+                  min={15}
+                  step={15}
+                  className="input"
+                  value={bookingDuration}
+                  onChange={(e) => setBookingDuration(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="booking-mode">Mode</label>
+                <select
+                  id="booking-mode"
+                  className="input"
+                  value={bookingMode}
+                  onChange={(e) =>
+                    setBookingMode(e.target.value as TutorProfile['mode'])
+                  }
+                >
+                  <option value="Online">Online</option>
+                  <option value="In-person">In-person</option>
+                  <option value="Hybrid">Hybrid</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!rescheduleTarget}
+        title={
+          rescheduleTarget
+            ? `Request reschedule — ${rescheduleTarget.title}`
+            : 'Request reschedule'
+        }
+        onClose={closeReschedule}
+        footer={
+          rescheduleTarget ? (
+            <>
+              <button className="btn" onClick={closeReschedule}>
+                Cancel
+              </button>
+              <button
+                className={`btn btn-primary ${
+                  session.role === 'parent' ? 'btn-parent' : 'btn-student'
+                }`}
+                onClick={confirmReschedule}
+              >
+                {Icons.Send({ size: 16 })}
+                Send request
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {rescheduleTarget ? (
+          <div className="grid" style={{ gap: 12 }}>
+            <p className="muted">
+              Current: {prettyWhen(rescheduleTarget.when)} •{' '}
+              {rescheduleTarget.durationMins} min • {rescheduleTarget.mode}
+            </p>
+            <div className="field">
+              <label className="label" htmlFor="reschedule-when">Propose a new time</label>
+              <input
+                id="reschedule-when"
+                type="datetime-local"
+                className="input"
+                value={rescheduleWhen}
+                onChange={(e) => setRescheduleWhen(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="reschedule-note">Note to tutor (optional)</label>
+              <textarea
+                id="reschedule-note"
+                rows={3}
+                className="input"
+                value={rescheduleNote}
+                onChange={(e) => setRescheduleNote(e.target.value)}
+                placeholder="Let your tutor know why you need a different time."
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+            <p className="subtle">
+              Your tutor can accept, decline, or counter-propose. The session
+              will be marked <strong>Pending tutor approval</strong> until then.
+            </p>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!cancelTarget}
+        title="Cancel this session?"
+        onClose={() => setCancelTarget(null)}
+        footer={
+          cancelTarget ? (
+            <>
+              <button className="btn" onClick={() => setCancelTarget(null)}>
+                Keep session
+              </button>
+              <button className="btn btn-danger" onClick={confirmCancel}>
+                {Icons.Close({ size: 16 })}
+                Cancel session
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {cancelTarget ? (
+          <div className="grid" style={{ gap: 8 }}>
+            <p className="subtle">
+              <strong>{cancelTarget.title}</strong>
+            </p>
+            <p className="muted">
+              {prettyWhen(cancelTarget.when)} • {cancelTarget.durationMins} min •{' '}
+              {cancelTarget.mode}
+            </p>
+            <p>This will notify the tutor. You can always book again later.</p>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!counterRequestId}
+        title="Counter-propose a time"
+        onClose={() => setCounterRequestId(null)}
+        footer={
+          <>
+            <button className="btn" onClick={() => setCounterRequestId(null)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary btn-tutor" onClick={submitCounter}>
+              {Icons.Send({ size: 16 })}
+              Send counter
+            </button>
+          </>
+        }
+      >
+        <div className="grid" style={{ gap: 12 }}>
+          <div className="field">
+            <label className="label" htmlFor="counter-when">Your proposed time</label>
+            <input
+              id="counter-when"
+              type="datetime-local"
+              className="input"
+              value={counterWhen}
+              onChange={(e) => setCounterWhen(e.target.value)}
+            />
+          </div>
+          <p className="subtle">
+            The learner will see your counter-proposal and can accept it from
+            their side.
+          </p>
+        </div>
+      </Modal>
+
+      {reviewTarget ? (
+        <ReviewModal
+          open={!!reviewTarget}
+          tutorId={reviewTarget.tutorId}
+          tutorName={reviewTarget.tutorName}
+          authorName={session.displayName}
+          authorEmail={session.email}
+          onClose={() => setReviewTarget(null)}
+        />
+      ) : null}
     </main>
   )
 }

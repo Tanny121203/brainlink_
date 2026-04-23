@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { clearSession, getSession } from '../state/session'
 import { Icons } from './icons'
+import { toast } from './Toast'
+import { NotificationsBell } from './NotificationsBell'
 import { BRAINLINK_LOGO_SRC } from '../branding'
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -14,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     location.pathname === '/sign-up' ||
     location.pathname === '/join'
   const inApp = location.pathname.startsWith('/app')
-  const landingHome = location.pathname === '/' && !session
+  const landingHome = location.pathname === '/'
 
   return (
     <div className={`app-shell${landingHome ? ' app-shell--landing-home' : ''}`}>
@@ -38,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </button>
               ) : null}
 
-              {location.pathname === '/' && !session ? (
+              {!showBack && location.pathname === '/' && !session ? (
                 <>
                   <Link className="btn btn-primary btn-student" to="/sign-up">
                     {Icons.UserPlus({ size: 16 })}
@@ -51,8 +53,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </>
               ) : null}
 
-              {session ? (
+              {!showBack && session ? (
                 <>
+                  <NotificationsBell role={session.role} />
                   {!inApp ? (
                     <Link className="btn" to="/app">
                       {Icons.Dashboard({ size: 16 })}
@@ -63,6 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     className="btn"
                     onClick={() => {
                       clearSession()
+                      toast.info('Signed out. See you soon!')
                       navigate('/', { replace: true })
                     }}
                   >
@@ -71,8 +75,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </button>
                 </>
               ) : null}
-
-              {null}
             </div>
           </header>
           {children}
@@ -80,10 +82,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : (
         children
       )}
-
-      <footer className="muted" style={{ marginTop: 18 }}>
-        BrainLink — connect learning with the right support.
-      </footer>
     </div>
   )
 }

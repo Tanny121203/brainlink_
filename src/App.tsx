@@ -6,6 +6,7 @@ import { SignInPage } from './pages/SignInPage'
 import { SignUpPage } from './pages/SignUpPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { getSession } from './state/session'
+import { Toaster } from './components/Toast'
 
 export default function App() {
   useLocation() // ensure rerender on navigation for session reads
@@ -26,6 +27,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <Toaster />
     </AppShell>
   )
 }

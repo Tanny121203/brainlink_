@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { RolePill } from '../components/RolePill'
 import { Icons } from '../components/icons'
+import { SubjectPicker } from '../components/subjects'
+import { CitySearchInput } from '../components/cities/CitySearchInput'
+import { toast, useDocumentTitle } from '../components/Toast'
 import type { Role } from '../state/session'
 import {
   getPreferredRole,
@@ -23,7 +26,24 @@ function roleAccent(role: Role) {
   }
 }
 
+const YEAR_LEVELS = [
+  'Grade 1',
+  'Grade 2',
+  'Grade 3',
+  'Grade 4',
+  'Grade 5',
+  'Grade 6',
+  'Grade 7',
+  'Grade 8',
+  'Grade 9',
+  'Grade 10',
+  'Grade 11',
+  'Grade 12',
+  'College',
+] as const
+
 export function SignUpPage() {
+  useDocumentTitle('Create account · BrainLink')
   const nav = useNavigate()
   const initialRole = getPreferredRole() ?? 'student'
   const [role, setRole] = useState<Role>(initialRole)
@@ -33,7 +53,13 @@ export function SignUpPage() {
   // Student fields
   const [studentYearLevel, setStudentYearLevel] = useState('Grade 8')
   const [studentSchoolName, setStudentSchoolName] = useState('')
-  const [studentSubjects, setStudentSubjects] = useState('Math, English')
+  const [studentSubjects, setStudentSubjects] = useState<string[]>([
+    'Mathematics',
+    'English',
+  ])
+  const [studentMode, setStudentMode] = useState<'Online' | 'In-person' | 'Hybrid'>(
+    'Online'
+  )
   const [studentGoal, setStudentGoal] = useState('Better grades + confidence')
 
   // Parent fields
@@ -45,7 +71,10 @@ export function SignUpPage() {
   const [parentCity, setParentCity] = useState('')
 
   // Tutor fields
-  const [tutorSubjects, setTutorSubjects] = useState('Math, Science')
+  const [tutorSubjects, setTutorSubjects] = useState<string[]>([
+    'Mathematics',
+    'Science',
+  ])
   const [tutorYears, setTutorYears] = useState('2')
   const [tutorMode, setTutorMode] = useState<'Online' | 'In-person' | 'Hybrid'>(
     'Online'
@@ -54,6 +83,29 @@ export function SignUpPage() {
   const [tutorBio, setTutorBio] = useState(
     'I focus on fundamentals first, then practice questions with feedback.'
   )
+  const [tutorPhoto, setTutorPhoto] = useState<string | undefined>(undefined)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError(null)
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please choose an image file (JPG or PNG).')
+      return
+    }
+    const MAX_BYTES = 3 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      setPhotoError('Image is too large. Please keep it under 3 MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setTutorPhoto(reader.result)
+    }
+    reader.onerror = () => setPhotoError('Could not read the file. Try another image.')
+    reader.readAsDataURL(file)
+  }
 
   const accent = useMemo(() => roleAccent(role), [role])
   const roleIcon =
@@ -64,8 +116,11 @@ export function SignUpPage() {
       const p: StudentProfile = {
         yearLevel: studentYearLevel,
         schoolName: studentSchoolName.trim() || undefined,
-        subjectsToImprove: studentSubjects.trim() || undefined,
+        subjectsToImprove: studentSubjects.length
+          ? studentSubjects.join(', ')
+          : undefined,
         learningGoal: studentGoal.trim() || undefined,
+        preferredMode: studentMode,
       }
       return p
     }
@@ -79,11 +134,14 @@ export function SignUpPage() {
       return p
     }
     const p: TutorProfile = {
-      subjects: tutorSubjects.trim() || 'General tutoring',
+      subjects: tutorSubjects.length
+        ? tutorSubjects.join(', ')
+        : 'General tutoring',
       yearsExperience: tutorYears.trim() || '1',
       teachingMode: tutorMode,
       city: tutorCity.trim() || undefined,
       shortBio: tutorBio.trim() || undefined,
+      photoDataUrl: tutorPhoto,
     }
     return p
   }, [
@@ -91,6 +149,7 @@ export function SignUpPage() {
     studentYearLevel,
     studentSchoolName,
     studentSubjects,
+    studentMode,
     studentGoal,
     childName,
     childYearLevel,
@@ -101,6 +160,7 @@ export function SignUpPage() {
     tutorMode,
     tutorCity,
     tutorBio,
+    tutorPhoto,
   ])
 
   return (
@@ -178,8 +238,8 @@ export function SignUpPage() {
 
           <div className="divider" />
 
-            {role === 'student' ? (
-              <div className="grid" style={{ gap: 12 }}>
+          {role === 'student' ? (
+            <div className="grid" style={{ gap: 12 }}>
               <div className="section-title">
                 <div>
                   <h3 style={{ fontSize: 18 }}>Student details</h3>
@@ -187,7 +247,10 @@ export function SignUpPage() {
                     Helps us match you with the right tutor.
                   </p>
                 </div>
-                <span className="pill" style={{ borderColor: 'transparent', background: 'var(--student-soft)' }}>
+                <span
+                  className="pill"
+                  style={{ borderColor: 'transparent', background: 'var(--student-soft)' }}
+                >
                   {Icons.Cap({ size: 16 })}
                   Student
                 </span>
@@ -201,7 +264,7 @@ export function SignUpPage() {
                     value={studentYearLevel}
                     onChange={(e) => setStudentYearLevel(e.target.value)}
                   >
-                    {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12','College'].map((v) => (
+                    {YEAR_LEVELS.map((v) => (
                       <option key={v} value={v}>
                         {v}
                       </option>
@@ -224,16 +287,45 @@ export function SignUpPage() {
 
               <div className="field">
                 <div className="label">Subjects to improve</div>
-                <div className="input-group">
-                  <span className="input-icon">{Icons.Book({ size: 16 })}</span>
-                  <input
-                    className="input with-icon"
-                    placeholder="e.g., Math, English"
-                    value={studentSubjects}
-                    onChange={(e) => setStudentSubjects(e.target.value)}
-                  />
+                <SubjectPicker
+                  selected={studentSubjects}
+                  onChange={setStudentSubjects}
+                />
+              </div>
+
+              <div className="field">
+                <div className="label">How do you like to learn?</div>
+                <div
+                  className="mode-segmented"
+                  role="radiogroup"
+                  aria-label="Preferred learning mode"
+                >
+                  {(
+                    [
+                      { value: 'Online', label: 'Online' },
+                      { value: 'In-person', label: 'In-person' },
+                      { value: 'Hybrid', label: 'Hybrid' },
+                    ] as const
+                  ).map(({ value, label }) => {
+                    const active = studentMode === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`subject-chip ${active ? 'is-on' : ''}`}
+                        data-role="student"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setStudentMode(value)}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
-                <div className="muted">Tip: comma-separated is fine for now.</div>
+                <div className="muted">
+                  This helps us match you with tutors who teach the way you prefer.
+                </div>
               </div>
 
               <div className="field">
@@ -247,18 +339,21 @@ export function SignUpPage() {
                 />
               </div>
             </div>
-            ) : null}
+          ) : null}
 
-            {role === 'parent' ? (
-              <div className="grid" style={{ gap: 12 }}>
+          {role === 'parent' ? (
+            <div className="grid" style={{ gap: 12 }}>
               <div className="section-title">
                 <div>
                   <h3 style={{ fontSize: 18 }}>Child details</h3>
                   <p className="subtle" style={{ marginTop: 6 }}>
-                    Required so tutors can understand the student’s level.
+                    Required so tutors can understand the student's level.
                   </p>
                 </div>
-                <span className="pill" style={{ borderColor: 'transparent', background: 'var(--parent-soft)' }}>
+                <span
+                  className="pill"
+                  style={{ borderColor: 'transparent', background: 'var(--parent-soft)' }}
+                >
                   {Icons.Shield({ size: 16 })}
                   Parent
                 </span>
@@ -266,7 +361,7 @@ export function SignUpPage() {
 
               <div className="grid grid-2">
                 <div className="field">
-                  <div className="label">Child’s name</div>
+                  <div className="label">Child's name</div>
                   <div className="input-group">
                     <span className="input-icon">{Icons.User({ size: 16 })}</span>
                     <input
@@ -284,7 +379,7 @@ export function SignUpPage() {
                     value={childYearLevel}
                     onChange={(e) => setChildYearLevel(e.target.value)}
                   >
-                    {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12','College'].map((v) => (
+                    {YEAR_LEVELS.map((v) => (
                       <option key={v} value={v}>
                         {v}
                       </option>
@@ -308,22 +403,18 @@ export function SignUpPage() {
                 </div>
                 <div className="field">
                   <div className="label">City (optional)</div>
-                  <div className="input-group">
-                    <span className="input-icon">{Icons.Pin({ size: 16 })}</span>
-                    <input
-                      className="input with-icon"
-                      placeholder="e.g., Quezon City"
-                      value={parentCity}
-                      onChange={(e) => setParentCity(e.target.value)}
-                    />
-                  </div>
+                  <CitySearchInput
+                    value={parentCity}
+                    onChange={setParentCity}
+                    placeholder="Search city..."
+                  />
                 </div>
               </div>
-              </div>
-            ) : null}
+            </div>
+          ) : null}
 
-            {role === 'tutor' ? (
-              <div className="grid" style={{ gap: 12 }}>
+          {role === 'tutor' ? (
+            <div className="grid" style={{ gap: 12 }}>
               <div className="section-title">
                 <div>
                   <h3 style={{ fontSize: 18 }}>Tutor profile</h3>
@@ -331,26 +422,80 @@ export function SignUpPage() {
                     The essentials parents look for when choosing a tutor.
                   </p>
                 </div>
-                <span className="pill" style={{ borderColor: 'transparent', background: 'var(--tutor-soft)' }}>
+                <span
+                  className="pill"
+                  style={{ borderColor: 'transparent', background: 'var(--tutor-soft)' }}
+                >
                   {Icons.Handshake({ size: 16 })}
                   Tutor
                 </span>
               </div>
 
-              <div className="grid grid-2">
-                <div className="field">
-                  <div className="label">Expertise / subjects taught</div>
-                  <div className="input-group">
-                    <span className="input-icon">{Icons.Book({ size: 16 })}</span>
-                    <input
-                      className="input with-icon"
-                      placeholder="e.g., Math, Algebra, Science"
-                      value={tutorSubjects}
-                      onChange={(e) => setTutorSubjects(e.target.value)}
-                    />
-                  </div>
-                  <div className="muted">Tip: comma-separated is fine for now.</div>
+              <div className="field">
+                <div className="label">
+                  Profile photo <span style={{ color: '#a6262b' }}>*</span>
                 </div>
+                <div className="tutor-photo-row">
+                  <div className="tutor-photo-preview" aria-hidden={tutorPhoto ? 'false' : 'true'}>
+                    {tutorPhoto ? (
+                      <img src={tutorPhoto} alt="Your profile preview" />
+                    ) : (
+                      <span className="tutor-photo-placeholder">
+                        {Icons.User({ size: 32 })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="tutor-photo-actions">
+                    <label className="btn btn-elevated tutor-photo-btn">
+                      {Icons.Camera({ size: 16 })}
+                      {tutorPhoto ? 'Replace photo' : 'Upload photo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handlePhotoChange}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    {tutorPhoto ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => {
+                          setTutorPhoto(undefined)
+                          setPhotoError(null)
+                        }}
+                      >
+                        {Icons.Trash({ size: 16 })}
+                        Remove
+                      </button>
+                    ) : null}
+                    <div className="muted" style={{ marginTop: 2 }}>
+                      Required. A clear, friendly headshot helps parents and students trust you.
+                      JPG or PNG, up to 3 MB.
+                    </div>
+                    {photoError ? (
+                      <div
+                        className="muted"
+                        role="alert"
+                        style={{ color: '#a6262b', marginTop: 4 }}
+                      >
+                        {photoError}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="field">
+                <div className="label">Expertise / subjects taught</div>
+                <SubjectPicker
+                  selected={tutorSubjects}
+                  onChange={setTutorSubjects}
+                  role="tutor"
+                />
+              </div>
+
+              <div className="grid grid-2">
                 <div className="field">
                   <div className="label">Years of experience</div>
                   <div className="input-group">
@@ -364,32 +509,48 @@ export function SignUpPage() {
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-2">
-                <div className="field">
-                  <div className="label">Teaching mode</div>
-                  <select
-                    className="input"
-                    value={tutorMode}
-                    onChange={(e) => setTutorMode(e.target.value as typeof tutorMode)}
-                  >
-                    <option value="Online">Online</option>
-                    <option value="In-person">In-person</option>
-                    <option value="Hybrid">Hybrid</option>
-                  </select>
-                </div>
                 <div className="field">
                   <div className="label">City (optional)</div>
-                  <div className="input-group">
-                    <span className="input-icon">{Icons.Pin({ size: 16 })}</span>
-                    <input
-                      className="input with-icon"
-                      placeholder="e.g., Manila"
-                      value={tutorCity}
-                      onChange={(e) => setTutorCity(e.target.value)}
-                    />
-                  </div>
+                  <CitySearchInput
+                    value={tutorCity}
+                    onChange={setTutorCity}
+                    placeholder="Search city..."
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <div className="label">Teaching mode</div>
+                <div
+                  className="mode-segmented"
+                  role="radiogroup"
+                  aria-label="Teaching mode"
+                >
+                  {(
+                    [
+                      { value: 'Online', label: 'Online' },
+                      { value: 'In-person', label: 'In-person' },
+                      { value: 'Hybrid', label: 'Hybrid' },
+                    ] as const
+                  ).map(({ value, label }) => {
+                    const active = tutorMode === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`subject-chip ${active ? 'is-on' : ''}`}
+                        data-role="tutor"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setTutorMode(value)}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="muted">
+                  How do you usually meet with students?
                 </div>
               </div>
 
@@ -403,19 +564,45 @@ export function SignUpPage() {
                   style={{ resize: 'vertical' }}
                 />
               </div>
-              </div>
-            ) : null}
+            </div>
+          ) : null}
+
+          {role === 'tutor' && !tutorPhoto ? (
+            <div
+              className="muted"
+              role="alert"
+              style={{
+                marginTop: 12,
+                color: '#a6262b',
+                background: 'rgba(255, 221, 221, 0.55)',
+                border: '1px solid rgba(166, 38, 43, 0.25)',
+                borderRadius: 10,
+                padding: '10px 12px',
+              }}
+            >
+              A profile photo is required for tutors so parents and students can trust who
+              they’re connecting with. Please upload a clear headshot to continue.
+            </div>
+          ) : null}
 
           <div className="btn-row" style={{ marginTop: 14 }}>
             <button
               className={`btn ${accent.btn}`}
+              disabled={role === 'tutor' && !tutorPhoto}
               onClick={() => {
+                if (role === 'tutor' && !tutorPhoto) {
+                  setPhotoError('A profile photo is required for tutors.')
+                  toast.error('Please upload a profile photo to continue.')
+                  return
+                }
+                const finalName = displayName.trim() || 'New user'
                 setSession({
                   role,
-                  displayName: displayName.trim() || 'New user',
+                  displayName: finalName,
                   email: email.trim() || 'new@brainlink.local',
                   profile,
                 })
+                toast.success(`Account created — welcome to BrainLink, ${finalName}!`)
                 nav('/app')
               }}
             >
@@ -427,7 +614,6 @@ export function SignUpPage() {
               I already have an account
             </Link>
           </div>
-
         </div>
       </div>
     </main>
@@ -435,4 +621,3 @@ export function SignUpPage() {
 }
 
 type SessionProfile = StudentProfile | ParentProfile | TutorProfile
-
