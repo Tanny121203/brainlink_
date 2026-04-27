@@ -9,7 +9,7 @@ import type { Role } from '../state/session'
 import {
   getPreferredRole,
   setPreferredRole,
-  setSession,
+  signUpWithServer,
   type ParentProfile,
   type StudentProfile,
   type TutorProfile,
@@ -49,6 +49,7 @@ export function SignUpPage() {
   const [role, setRole] = useState<Role>(initialRole)
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
   // Student fields
   const [studentYearLevel, setStudentYearLevel] = useState('Grade 8')
@@ -57,17 +58,11 @@ export function SignUpPage() {
     'Mathematics',
     'English',
   ])
-  const [studentMode, setStudentMode] = useState<'Online' | 'In-person' | 'Hybrid'>(
-    'Online'
-  )
   const [studentGoal, setStudentGoal] = useState('Better grades + confidence')
 
   // Parent fields
   const [childName, setChildName] = useState('')
   const [childYearLevel, setChildYearLevel] = useState('Grade 8')
-  const [parentMode, setParentMode] = useState<'Online' | 'In-person' | 'Hybrid'>(
-    'Online'
-  )
   const [parentCity, setParentCity] = useState('')
 
   // Tutor fields
@@ -76,9 +71,6 @@ export function SignUpPage() {
     'Science',
   ])
   const [tutorYears, setTutorYears] = useState('2')
-  const [tutorMode, setTutorMode] = useState<'Online' | 'In-person' | 'Hybrid'>(
-    'Online'
-  )
   const [tutorCity, setTutorCity] = useState('')
   const [tutorBio, setTutorBio] = useState(
     'I focus on fundamentals first, then practice questions with feedback.'
@@ -120,7 +112,6 @@ export function SignUpPage() {
           ? studentSubjects.join(', ')
           : undefined,
         learningGoal: studentGoal.trim() || undefined,
-        preferredMode: studentMode,
       }
       return p
     }
@@ -128,7 +119,6 @@ export function SignUpPage() {
       const p: ParentProfile = {
         childName: childName.trim() || 'My child',
         childYearLevel,
-        preferredMode: parentMode,
         city: parentCity.trim() || undefined,
       }
       return p
@@ -138,7 +128,6 @@ export function SignUpPage() {
         ? tutorSubjects.join(', ')
         : 'General tutoring',
       yearsExperience: tutorYears.trim() || '1',
-      teachingMode: tutorMode,
       city: tutorCity.trim() || undefined,
       shortBio: tutorBio.trim() || undefined,
       photoDataUrl: tutorPhoto,
@@ -149,15 +138,12 @@ export function SignUpPage() {
     studentYearLevel,
     studentSchoolName,
     studentSubjects,
-    studentMode,
     studentGoal,
     childName,
     childYearLevel,
-    parentMode,
     parentCity,
     tutorSubjects,
     tutorYears,
-    tutorMode,
     tutorCity,
     tutorBio,
     tutorPhoto,
@@ -236,6 +222,21 @@ export function SignUpPage() {
             </div>
           </div>
 
+          <div className="field" style={{ marginTop: 12 }}>
+            <div className="label">Password</div>
+            <div className="input-group">
+              <span className="input-icon">{Icons.Key({ size: 16 })}</span>
+              <input
+                className="input with-icon"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
           <div className="divider" />
 
           {role === 'student' ? (
@@ -291,41 +292,6 @@ export function SignUpPage() {
                   selected={studentSubjects}
                   onChange={setStudentSubjects}
                 />
-              </div>
-
-              <div className="field">
-                <div className="label">How do you like to learn?</div>
-                <div
-                  className="mode-segmented"
-                  role="radiogroup"
-                  aria-label="Preferred learning mode"
-                >
-                  {(
-                    [
-                      { value: 'Online', label: 'Online' },
-                      { value: 'In-person', label: 'In-person' },
-                      { value: 'Hybrid', label: 'Hybrid' },
-                    ] as const
-                  ).map(({ value, label }) => {
-                    const active = studentMode === value
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        className={`subject-chip ${active ? 'is-on' : ''}`}
-                        data-role="student"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => setStudentMode(value)}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="muted">
-                  This helps us match you with tutors who teach the way you prefer.
-                </div>
               </div>
 
               <div className="field">
@@ -389,18 +355,6 @@ export function SignUpPage() {
               </div>
 
               <div className="grid grid-2">
-                <div className="field">
-                  <div className="label">Preferred mode</div>
-                  <select
-                    className="input"
-                    value={parentMode}
-                    onChange={(e) => setParentMode(e.target.value as typeof parentMode)}
-                  >
-                    <option value="Online">Online</option>
-                    <option value="In-person">In-person</option>
-                    <option value="Hybrid">Hybrid</option>
-                  </select>
-                </div>
                 <div className="field">
                   <div className="label">City (optional)</div>
                   <CitySearchInput
@@ -520,41 +474,6 @@ export function SignUpPage() {
               </div>
 
               <div className="field">
-                <div className="label">Teaching mode</div>
-                <div
-                  className="mode-segmented"
-                  role="radiogroup"
-                  aria-label="Teaching mode"
-                >
-                  {(
-                    [
-                      { value: 'Online', label: 'Online' },
-                      { value: 'In-person', label: 'In-person' },
-                      { value: 'Hybrid', label: 'Hybrid' },
-                    ] as const
-                  ).map(({ value, label }) => {
-                    const active = tutorMode === value
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        className={`subject-chip ${active ? 'is-on' : ''}`}
-                        data-role="tutor"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => setTutorMode(value)}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="muted">
-                  How do you usually meet with students?
-                </div>
-              </div>
-
-              <div className="field">
                 <div className="label">Short intro (optional)</div>
                 <textarea
                   className="input"
@@ -589,21 +508,34 @@ export function SignUpPage() {
             <button
               className={`btn ${accent.btn}`}
               disabled={role === 'tutor' && !tutorPhoto}
-              onClick={() => {
-                if (role === 'tutor' && !tutorPhoto) {
-                  setPhotoError('A profile photo is required for tutors.')
-                  toast.error('Please upload a profile photo to continue.')
-                  return
+              onClick={async () => {
+                try {
+                  if (role === 'tutor' && !tutorPhoto) {
+                    setPhotoError('A profile photo is required for tutors.')
+                    toast.error('Please upload a profile photo to continue.')
+                    return
+                  }
+                  const cleanEmail = email.trim()
+                  const cleanPassword = password.trim()
+                  if (!cleanEmail || !cleanPassword) {
+                    toast.error('Please enter email and password.')
+                    return
+                  }
+                  const finalName = displayName.trim() || 'New user'
+                  const session = await signUpWithServer({
+                    role,
+                    displayName: finalName,
+                    email: cleanEmail,
+                    password: cleanPassword,
+                    profile,
+                  })
+                  toast.success(`Account created — welcome to BrainLink, ${session.displayName}!`)
+                  nav('/app')
+                } catch (error) {
+                  const message =
+                    error instanceof Error ? error.message : 'Could not create account.'
+                  toast.error(message)
                 }
-                const finalName = displayName.trim() || 'New user'
-                setSession({
-                  role,
-                  displayName: finalName,
-                  email: email.trim() || 'new@brainlink.local',
-                  profile,
-                })
-                toast.success(`Account created — welcome to BrainLink, ${finalName}!`)
-                nav('/app')
               }}
             >
               {Icons.UserPlus({ size: 16 })}

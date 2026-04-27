@@ -1,73 +1,36 @@
-# React + TypeScript + Vite
+# BrainLink Sample
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+BrainLink is a React + TypeScript app deployed on Netlify.  
+This project now includes a production-oriented backend path:
 
-Currently, two official plugins are available:
+- Netlify Functions API
+- Neon Postgres
+- Drizzle schema + migrations
+- Cookie-based server-validated auth
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick start
 
-## React Compiler
+1. Install dependencies:
+   - `npm install`
+2. Run frontend:
+   - `npm run dev`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Database scripts
 
-## Expanding the ESLint configuration
+- `npm run db:generate` - generate migration files from `db/schema.ts`
+- `npm run db:migrate` - apply migrations to `DATABASE_URL`
+- `npm run db:studio` - open Drizzle Studio
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Required environment variables
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- `DATABASE_URL`
+- `AUTH_JWT_SECRET`
+- `CORS_ORIGIN`
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Important paths
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Netlify Functions: `netlify/functions`
+- Schema: `db/schema.ts`
+- SQL migration: `db/migrations/0001_initial.sql`
+- API contract notes: `docs/backend-api-contracts.md`
+- DB setup guide: `docs/database-setup.md`

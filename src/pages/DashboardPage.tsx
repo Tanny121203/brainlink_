@@ -679,8 +679,6 @@ export function DashboardPage({ session }: { session: Session }) {
   const [bookingWhen, setBookingWhen] = useState('')
   const [bookingSubject, setBookingSubject] = useState('')
   const [bookingDuration, setBookingDuration] = useState('60')
-  const [bookingMode, setBookingMode] =
-    useState<TutorProfile['mode']>('Online')
 
   // Reschedule modal
   const [rescheduleTarget, setRescheduleTarget] =
@@ -820,7 +818,6 @@ export function DashboardPage({ session }: { session: Session }) {
     setBookingTutor(tutor)
     setBookingSubject(tutor.subjects[0] ?? '')
     setBookingDuration('60')
-    setBookingMode(tutor.mode)
     setBookingWhen('')
   }
 
@@ -845,7 +842,7 @@ export function DashboardPage({ session }: { session: Session }) {
       subject: bookingSubject,
       when: bookingWhen,
       durationMins: duration,
-      mode: bookingMode,
+      mode: bookingTutor.mode,
       status: 'Upcoming',
       bookedByEmail: session.email,
       bookedForRole: session.role,
@@ -2250,34 +2247,17 @@ export function DashboardPage({ session }: { session: Session }) {
                 ))}
               </select>
             </div>
-            <div className="grid grid-2" style={{ gap: 12 }}>
-              <div className="field">
-                <label className="label" htmlFor="booking-duration">Duration (min)</label>
-                <input
-                  id="booking-duration"
-                  type="number"
-                  min={15}
-                  step={15}
-                  className="input"
-                  value={bookingDuration}
-                  onChange={(e) => setBookingDuration(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label className="label" htmlFor="booking-mode">Mode</label>
-                <select
-                  id="booking-mode"
-                  className="input"
-                  value={bookingMode}
-                  onChange={(e) =>
-                    setBookingMode(e.target.value as TutorProfile['mode'])
-                  }
-                >
-                  <option value="Online">Online</option>
-                  <option value="In-person">In-person</option>
-                  <option value="Hybrid">Hybrid</option>
-                </select>
-              </div>
+            <div className="field">
+              <label className="label" htmlFor="booking-duration">Duration (min)</label>
+              <input
+                id="booking-duration"
+                type="number"
+                min={15}
+                step={15}
+                className="input"
+                value={bookingDuration}
+                onChange={(e) => setBookingDuration(e.target.value)}
+              />
             </div>
           </div>
         ) : null}
