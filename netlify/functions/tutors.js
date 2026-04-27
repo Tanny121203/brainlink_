@@ -82,6 +82,7 @@ function toCredentialSummary(item) {
     mimeType: String(item.mimeType || ''),
     sizeBytes: Number(item.sizeBytes || 0),
     uploadedAtIso: String(item.uploadedAtIso || ''),
+    dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : undefined,
   }
 }
 
