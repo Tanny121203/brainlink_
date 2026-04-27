@@ -124,6 +124,17 @@ export async function handler(event) {
           name: String(row.display_name || 'Tutor'),
           email: String(row.email || ''),
           subjects,
+          level: ['Elementary', 'JHS', 'SHS', 'College'].includes(String(profile.level || ''))
+            ? String(profile.level)
+            : undefined,
+          mode: ['Online', 'In-person', 'Hybrid'].includes(String(profile.mode || ''))
+            ? String(profile.mode)
+            : undefined,
+          hourlyRate: Number(profile.hourlyRate || 0) || undefined,
+          rating: Number(profile.rating || 0) || undefined,
+          availability: Array.isArray(profile.availability)
+            ? profile.availability.map((x) => String(x || ''))
+            : undefined,
           city: String(profile.city || ''),
           yearsExperience: String(profile.yearsExperience || ''),
           shortBio: String(profile.shortBio || ''),
