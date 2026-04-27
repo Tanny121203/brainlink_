@@ -72,9 +72,10 @@ p {
 }
 
 .app-shell {
-  max-width: 1120px;
+  max-width: none;
+  width: 100%;
   padding: 28px 18px 44px;
-  margin: 0 auto;
+  margin: 0;
   box-sizing: border-box;
   overflow-x: clip;
 }
@@ -499,7 +500,7 @@ main.grid {
 }
 
 .form-wrap {
-  max-width: 1120px;
+  max-width: none;
   width: 100%;
 }
 

@@ -12,6 +12,7 @@ import {
   signUpWithServer,
   type ParentProfile,
   type StudentProfile,
+  type TutorCredential,
   type TutorProfile,
 } from '../state/session'
 
@@ -77,6 +78,8 @@ export function SignUpPage() {
   )
   const [tutorPhoto, setTutorPhoto] = useState<string | undefined>(undefined)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [tutorCredentials, setTutorCredentials] = useState<TutorCredential[]>([])
+  const [credentialError, setCredentialError] = useState<string | null>(null)
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhotoError(null)
@@ -97,6 +100,57 @@ export function SignUpPage() {
     }
     reader.onerror = () => setPhotoError('Could not read the file. Try another image.')
     reader.readAsDataURL(file)
+  }
+
+  const handleCredentialFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCredentialError(null)
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+
+    const allowedTypes = new Set([
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+    ])
+    const MAX_FILE_BYTES = 5 * 1024 * 1024
+    const MAX_FILES = 5
+    if (tutorCredentials.length + files.length > MAX_FILES) {
+      setCredentialError('You can upload up to 5 credential files.')
+      return
+    }
+
+    const next: TutorCredential[] = []
+    for (const file of files) {
+      if (!allowedTypes.has(file.type)) {
+        setCredentialError('Only PDF, PNG, JPG, and WEBP files are allowed.')
+        return
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        setCredentialError(`"${file.name}" is too large. Max size is 5 MB.`)
+        return
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read file.'))
+        reader.onerror = () => reject(new Error('Could not read file.'))
+        reader.readAsDataURL(file)
+      })
+      next.push({
+        id: `cred-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        uploadedAtIso: new Date().toISOString(),
+        dataUrl,
+      })
+    }
+
+    setTutorCredentials((prev) => [...prev, ...next])
+    e.target.value = ''
   }
 
   const accent = useMemo(() => roleAccent(role), [role])
@@ -131,6 +185,7 @@ export function SignUpPage() {
       city: tutorCity.trim() || undefined,
       shortBio: tutorBio.trim() || undefined,
       photoDataUrl: tutorPhoto,
+      credentials: tutorCredentials,
     }
     return p
   }, [
@@ -147,6 +202,7 @@ export function SignUpPage() {
     tutorCity,
     tutorBio,
     tutorPhoto,
+    tutorCredentials,
   ])
 
   return (
@@ -483,10 +539,74 @@ export function SignUpPage() {
                   style={{ resize: 'vertical' }}
                 />
               </div>
+
+              <div className="field">
+                <div className="label">
+                  Credentials (certification, diploma, etc.){' '}
+                  <span style={{ color: '#a6262b' }}>*</span>
+                </div>
+                <label className="btn btn-elevated tutor-photo-btn">
+                  {Icons.Send({ size: 16 })}
+                  Upload credentials
+                  <input
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg,image/webp"
+                    multiple
+                    onChange={handleCredentialFiles}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                <div className="muted">
+                  Required. Upload up to 5 files (PDF/JPG/PNG/WEBP), max 5 MB each.
+                </div>
+                {tutorCredentials.length > 0 ? (
+                  <div className="grid" style={{ gap: 8 }}>
+                    {tutorCredentials.map((cred) => (
+                      <div
+                        key={cred.id}
+                        className="card"
+                        style={{ background: 'rgba(255,255,255,0.62)' }}
+                      >
+                        <div className="card-inner" style={{ padding: '10px 12px' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                            }}
+                          >
+                            <div className="muted" style={{ overflowWrap: 'anywhere' }}>
+                              {cred.fileName} • {(cred.sizeBytes / (1024 * 1024)).toFixed(2)} MB
+                            </div>
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() =>
+                                setTutorCredentials((prev) =>
+                                  prev.filter((item) => item.id !== cred.id)
+                                )
+                              }
+                            >
+                              {Icons.Trash({ size: 14 })}
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {credentialError ? (
+                  <div className="muted" role="alert" style={{ color: '#a6262b' }}>
+                    {credentialError}
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
-          {role === 'tutor' && !tutorPhoto ? (
+          {role === 'tutor' && (!tutorPhoto || tutorCredentials.length === 0) ? (
             <div
               className="muted"
               role="alert"
@@ -499,20 +619,25 @@ export function SignUpPage() {
                 padding: '10px 12px',
               }}
             >
-              A profile photo is required for tutors so parents and students can trust who
-              they’re connecting with. Please upload a clear headshot to continue.
+              Tutors must upload a profile photo and at least one credential file before
+              creating an account.
             </div>
           ) : null}
 
           <div className="btn-row" style={{ marginTop: 14 }}>
             <button
               className={`btn ${accent.btn}`}
-              disabled={role === 'tutor' && !tutorPhoto}
+              disabled={role === 'tutor' && (!tutorPhoto || tutorCredentials.length === 0)}
               onClick={async () => {
                 try {
                   if (role === 'tutor' && !tutorPhoto) {
                     setPhotoError('A profile photo is required for tutors.')
                     toast.error('Please upload a profile photo to continue.')
+                    return
+                  }
+                  if (role === 'tutor' && tutorCredentials.length === 0) {
+                    setCredentialError('At least one credential file is required for tutors.')
+                    toast.error('Please upload at least one credential file to continue.')
                     return
                   }
                   const cleanEmail = email.trim()

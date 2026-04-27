@@ -103,3 +103,16 @@ export const notificationReads = pgTable(
   (table) => [primaryKey({ columns: [table.userEmail, table.notificationId] })]
 )
 
+export const tutorCredentials = pgTable('tutor_credentials', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  tutorUserId: varchar('tutor_user_id', { length: 40 })
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  mimeType: varchar('mime_type', { length: 80 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  dataUrl: text('data_url').notNull(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+

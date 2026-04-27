@@ -22,7 +22,8 @@ import {
   type TutorSession,
   type TutorProfile,
 } from '../mock/data'
-import type { Session } from '../state/session'
+import type { Session, TutorCredential } from '../state/session'
+import { fetchServerTutors, type ServerTutor } from '../state/serverApi'
 import { SectionTitle, Stat } from '../components/ui'
 import { Icons } from '../components/icons'
 import { MessagesPanel } from './MessagesPage'
@@ -85,6 +86,45 @@ type UnifiedSession = {
   mode: TutorProfile['mode']
   status: StudentSession['status'] | 'Canceled' | 'Pending tutor approval'
   isUserBooked: boolean
+}
+
+type TutorProfileViewData = {
+  id: string
+  name: string
+  subjects: string[]
+  level?: TutorProfile['level']
+  city?: string
+  mode?: TutorProfile['mode']
+  hourlyRate?: number
+  rating?: number
+  yearsExperience?: string
+  shortBio?: string
+  photoDataUrl?: string
+  credentials?: TutorCredential[]
+}
+
+function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
+  const subjects = tutor.subjects.length ? tutor.subjects : ['General tutoring']
+  return {
+    id: tutor.id,
+    name: tutor.name,
+    subjects,
+    level: 'JHS',
+    mode: 'Online',
+    hourlyRate: 450,
+    classesCount: 0,
+    city: tutor.city || 'N/A',
+    rating: 5,
+    availability: [],
+    yearsExperience: tutor.yearsExperience || undefined,
+    shortBio: tutor.shortBio || undefined,
+    credentials: tutor.credentials.map((cred) => ({
+      id: cred.id,
+      title: cred.fileName,
+      fileName: cred.fileName,
+      url: cred.dataUrl,
+    })),
+  }
 }
 
 function userToUnified(s: UserSession): UnifiedSession {
@@ -182,17 +222,21 @@ function TutorCard({
   t,
   existingTutor,
   onBook,
+  onViewProfile,
+  onMessage,
 }: {
   t: TutorProfile
   /** When set, this tutor is already in the learner’s roster (student/parent). */
   existingTutor?: boolean
   onBook?: (tutor: TutorProfile) => void
+  onViewProfile?: (tutor: TutorProfile) => void
+  onMessage?: (tutor: TutorProfile) => void
 }) {
   const tutorAvailability = useMemo(
     () => createAvailability(t.availability),
     [t.availability]
   )
-  const menuItems = tutorCardMenu(t, existingTutor, onBook)
+  const menuItems = tutorCardMenu(t, existingTutor, onBook, onViewProfile, onMessage)
 
   return (
     <div className="card">
@@ -247,24 +291,22 @@ function TutorCard({
 function tutorCardMenu(
   t: TutorProfile,
   existingTutor: boolean | undefined,
-  onBook?: (tutor: TutorProfile) => void
+  onBook?: (tutor: TutorProfile) => void,
+  onViewProfile?: (tutor: TutorProfile) => void,
+  onMessage?: (tutor: TutorProfile) => void
 ): OverflowMenuItem[] {
   return [
     {
       key: 'profile',
       label: 'View profile',
       icon: Icons.CheckBook,
-      onSelect: () => {
-        /* View profile modal not wired yet in the prototype */
-      },
+      onSelect: () => onViewProfile?.(t),
     },
     {
       key: 'message',
       label: 'Message',
       icon: Icons.Message,
-      onSelect: () => {
-        /* Messages panel opens from the sidebar */
-      },
+      onSelect: () => onMessage?.(t),
     },
     {
       key: 'book',
@@ -313,16 +355,22 @@ function SubjectChips({
 
 function tutorListCardMenu(
   t: TutorProfile,
-  onBook?: (tutor: TutorProfile) => void
+  onBook?: (tutor: TutorProfile) => void,
+  onViewProfile?: (tutor: TutorProfile) => void,
+  onMessage?: (tutor: TutorProfile) => void
 ): OverflowMenuItem[] {
   return [
+    {
+      key: 'profile',
+      label: 'View profile',
+      icon: Icons.CheckBook,
+      onSelect: () => onViewProfile?.(t),
+    },
     {
       key: 'message',
       label: 'Message',
       icon: Icons.Message,
-      onSelect: () => {
-        /* Messages panel opens from the sidebar */
-      },
+      onSelect: () => onMessage?.(t),
     },
     {
       key: 'book',
@@ -335,8 +383,12 @@ function tutorListCardMenu(
 
 function YourTutorsStudentList({
   onBook,
+  onViewProfile,
+  onMessage,
 }: {
   onBook?: (tutor: TutorProfile) => void
+  onViewProfile?: (tutor: TutorProfile) => void
+  onMessage?: (tutor: TutorProfile) => void
 }) {
   return (
     <section className="card">
@@ -367,7 +419,7 @@ function YourTutorsStudentList({
                       <span className="pill">
                         {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
                       </span>
-                      <OverflowMenu items={tutorListCardMenu(t, onBook)} />
+                      <OverflowMenu items={tutorListCardMenu(t, onBook, onViewProfile, onMessage)} />
                     </div>
                   </div>
                   <SubjectChips
@@ -400,11 +452,11 @@ function StudentTutorsBrowseHub({
   setQuery,
   level,
   setLevel,
-  mode,
-  setMode,
   filteredTutors,
   existingTutorIds,
   onBook,
+  onViewProfile,
+  onMessage,
 }: {
   tutorView: 'discover' | 'my'
   setTutorView: (v: 'discover' | 'my') => void
@@ -412,11 +464,11 @@ function StudentTutorsBrowseHub({
   setQuery: (v: string) => void
   level: 'All' | TutorProfile['level']
   setLevel: (v: 'All' | TutorProfile['level']) => void
-  mode: 'All' | TutorProfile['mode']
-  setMode: (v: 'All' | TutorProfile['mode']) => void
   filteredTutors: TutorProfile[]
   existingTutorIds: Set<string>
   onBook?: (tutor: TutorProfile) => void
+  onViewProfile?: (tutor: TutorProfile) => void
+  onMessage?: (tutor: TutorProfile) => void
 }) {
   const discoveryTutors = useMemo(
     () => filteredTutors.filter((t) => !existingTutorIds.has(t.id)),
@@ -462,7 +514,11 @@ function StudentTutorsBrowseHub({
       </div>
 
       {tutorView === 'my' ? (
-        <YourTutorsStudentList onBook={onBook} />
+        <YourTutorsStudentList
+          onBook={onBook}
+          onViewProfile={onViewProfile}
+          onMessage={onMessage}
+        />
       ) : (
         <BrowseTutorsDiscover
           title="Browse tutors"
@@ -471,11 +527,11 @@ function StudentTutorsBrowseHub({
           setQuery={setQuery}
           level={level}
           setLevel={setLevel}
-          mode={mode}
-          setMode={setMode}
           filteredTutors={discoveryTutors}
           existingTutorIds={new Set()}
           onBook={onBook}
+          onViewProfile={onViewProfile}
+          onMessage={onMessage}
         />
       )}
     </section>
@@ -489,11 +545,11 @@ function BrowseTutorsDiscover({
   setQuery,
   level,
   setLevel,
-  mode,
-  setMode,
   filteredTutors,
   existingTutorIds,
   onBook,
+  onViewProfile,
+  onMessage,
 }: {
   title: string
   subtitle: string
@@ -501,12 +557,12 @@ function BrowseTutorsDiscover({
   setQuery: (v: string) => void
   level: 'All' | TutorProfile['level']
   setLevel: (v: 'All' | TutorProfile['level']) => void
-  mode: 'All' | TutorProfile['mode']
-  setMode: (v: 'All' | TutorProfile['mode']) => void
   filteredTutors: TutorProfile[]
   /** Tutor ids already linked on the account (shown with a “Your tutor” badge). */
   existingTutorIds: Set<string>
   onBook?: (tutor: TutorProfile) => void
+  onViewProfile?: (tutor: TutorProfile) => void
+  onMessage?: (tutor: TutorProfile) => void
 }) {
   return (
     <section className="grid" style={{ gap: 14 }}>
@@ -531,34 +587,19 @@ function BrowseTutorsDiscover({
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
-            <div className="grid grid-2" style={{ gap: 10 }}>
-              <div className="field">
-                <div className="label">Level</div>
-                <select
-                  className="input"
-                  value={level}
-                  onChange={(e) => setLevel(e.target.value as typeof level)}
-                >
-                  <option value="All">All</option>
-                  <option value="Elementary">Elementary</option>
-                  <option value="JHS">JHS</option>
-                  <option value="SHS">SHS</option>
-                  <option value="College">College</option>
-                </select>
-              </div>
-              <div className="field">
-                <div className="label">Mode</div>
-                <select
-                  className="input"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as typeof mode)}
-                >
-                  <option value="All">All</option>
-                  <option value="Online">Online</option>
-                  <option value="In-person">In-person</option>
-                  <option value="Hybrid">Hybrid</option>
-                </select>
-              </div>
+            <div className="field">
+              <div className="label">Level</div>
+              <select
+                className="input"
+                value={level}
+                onChange={(e) => setLevel(e.target.value as typeof level)}
+              >
+                <option value="All">All</option>
+                <option value="Elementary">Elementary</option>
+                <option value="JHS">JHS</option>
+                <option value="SHS">SHS</option>
+                <option value="College">College</option>
+              </select>
             </div>
           </div>
 
@@ -568,7 +609,6 @@ function BrowseTutorsDiscover({
               onClick={() => {
                 setQuery('')
                 setLevel('All')
-                setMode('All')
               }}
             >
               {Icons.Filter({ size: 16 })}
@@ -586,6 +626,8 @@ function BrowseTutorsDiscover({
             t={t}
             existingTutor={existingTutorIds.has(t.id)}
             onBook={onBook}
+            onViewProfile={onViewProfile}
+            onMessage={onMessage}
           />
         ))}
       </section>
@@ -617,7 +659,9 @@ export function DashboardPage({ session }: { session: Session }) {
           subjects?: string
           yearsExperience?: string
           city?: string
+          shortBio?: string
           photoDataUrl?: string
+          credentials?: TutorCredential[]
         } | undefined)
       : undefined
 
@@ -654,10 +698,11 @@ export function DashboardPage({ session }: { session: Session }) {
 
   const [query, setQuery] = useState('')
   const [level, setLevel] = useState<'All' | TutorProfile['level']>('All')
-  const [mode, setMode] = useState<'All' | TutorProfile['mode']>('All')
   const [studentTutorView, setStudentTutorView] = useState<'discover' | 'my'>(
     'discover'
   )
+  const [serverTutors, setServerTutors] = useState<ServerTutor[]>([])
+  const [profileTutor, setProfileTutor] = useState<TutorProfileViewData | null>(null)
 
   const [detailsNeedId, setDetailsNeedId] = useState<string | null>(null)
   const [offerNeedId, setOfferNeedId] = useState<string | null>(null)
@@ -715,6 +760,32 @@ export function DashboardPage({ session }: { session: Session }) {
   )
 
   useEffect(() => {
+    if (session.role === 'tutor') return
+    let alive = true
+    fetchServerTutors()
+      .then((result) => {
+        if (!alive) return
+        setServerTutors(result.tutors)
+      })
+      .catch(() => {
+        if (!alive) return
+        setServerTutors([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [session.role])
+
+  const tutorDirectory = useMemo<TutorProfile[]>(() => {
+    const byId = new Map<string, TutorProfile>()
+    for (const tutor of tutorProfiles) byId.set(tutor.id, tutor)
+    for (const serverTutor of serverTutors) {
+      byId.set(serverTutor.id, mapServerTutorToCatalogTutor(serverTutor))
+    }
+    return Array.from(byId.values())
+  }, [serverTutors])
+
+  useEffect(() => {
     if (session.role === 'tutor') {
       const fresh = loadAvailabilityFor(session.email)
       setSavedAvailability(fresh)
@@ -748,17 +819,16 @@ export function DashboardPage({ session }: { session: Session }) {
 
   const filteredTutors = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return tutorProfiles.filter((t) => {
+    return tutorDirectory.filter((t) => {
       const matchesQuery =
         !q ||
         t.name.toLowerCase().includes(q) ||
         t.subjects.some((s) => s.toLowerCase().includes(q)) ||
         t.city.toLowerCase().includes(q)
       const matchesLevel = level === 'All' || t.level === level
-      const matchesMode = mode === 'All' || t.mode === mode
-      return matchesQuery && matchesLevel && matchesMode
+      return matchesQuery && matchesLevel
     })
-  }, [query, level, mode])
+  }, [query, level, tutorDirectory])
 
   const studentExistingTutorIds = useMemo(
     () => new Set(studentTutors.map((r) => r.tutorId)),
@@ -821,6 +891,47 @@ export function DashboardPage({ session }: { session: Session }) {
     setBookingWhen('')
   }
 
+  function openTutorProfile(tutor: TutorProfile) {
+    const profileFromSession =
+      session.role === 'tutor' &&
+      tutor.name.toLowerCase() === session.displayName.toLowerCase() &&
+      tutorProfile
+        ? tutorProfile
+        : undefined
+    setProfileTutor({
+      id: tutor.id,
+      name: tutor.name,
+      subjects: tutor.subjects,
+      level: tutor.level,
+      city: tutor.city,
+      mode: tutor.mode,
+      hourlyRate: tutor.hourlyRate,
+      rating: tutor.rating,
+      yearsExperience: profileFromSession?.yearsExperience ?? tutor.yearsExperience,
+      shortBio: profileFromSession?.shortBio ?? tutor.shortBio,
+      photoDataUrl: profileFromSession?.photoDataUrl,
+      credentials:
+        profileFromSession?.credentials ??
+        tutor.credentials?.map((cred) => ({
+          id: cred.id,
+          fileName: cred.fileName,
+          mimeType: 'application/pdf',
+          sizeBytes: 0,
+          uploadedAtIso: new Date().toISOString(),
+          dataUrl: cred.url,
+        })),
+    })
+  }
+
+  function openMessageForTutor(tutor: { id: string; name: string }) {
+    setProfileTutor(null)
+    const q = new URLSearchParams()
+    q.set('request', `tutor-${tutor.id}`)
+    q.set('tutorId', tutor.id)
+    q.set('tutor', tutor.name)
+    navigate(`/app/messages?${q.toString()}`)
+  }
+
   function closeBookingModal() {
     setBookingTutor(null)
   }
@@ -873,7 +984,7 @@ export function DashboardPage({ session }: { session: Session }) {
 
     const tutorName =
       rescheduleTarget.tutorName ??
-      tutorProfiles.find((t) => t.id === rescheduleTarget.tutorId)?.name ??
+      tutorDirectory.find((t) => t.id === rescheduleTarget.tutorId)?.name ??
       'your tutor'
 
     let affectedSessionId = rescheduleTarget.id
@@ -989,7 +1100,7 @@ export function DashboardPage({ session }: { session: Session }) {
         label: 'Rate tutor',
         icon: Icons.Star,
         onSelect: () => {
-          const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+          const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
           setReviewTarget({
             tutorId: s.tutorId,
             tutorName: tutor?.name ?? s.tutorName ?? 'Tutor',
@@ -1207,7 +1318,7 @@ export function DashboardPage({ session }: { session: Session }) {
                       <p className="muted">No sessions yet. Book a tutor to get started.</p>
                     ) : null}
                     {mergedStudentSessions.map((s) => {
-                      const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
                       const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
@@ -1269,11 +1380,11 @@ export function DashboardPage({ session }: { session: Session }) {
                 setQuery={setQuery}
                 level={level}
                 setLevel={setLevel}
-                mode={mode}
-                setMode={setMode}
                 filteredTutors={filteredTutors}
                 existingTutorIds={studentExistingTutorIds}
                 onBook={openBookingModal}
+                onViewProfile={openTutorProfile}
+                onMessage={openMessageForTutor}
               />
             ) : section === 'student.profile' ? (
               <ProfileSection session={session} />
@@ -1398,7 +1509,7 @@ export function DashboardPage({ session }: { session: Session }) {
                       <p className="muted">No sessions yet. Book a tutor to schedule one.</p>
                     ) : null}
                     {mergedParentSessions.map((s) => {
-                      const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
                       const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
@@ -1475,7 +1586,14 @@ export function DashboardPage({ session }: { session: Session }) {
                                 <span className="pill">
                                   {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
                                 </span>
-                                <OverflowMenu items={tutorListCardMenu(t, openBookingModal)} />
+                                <OverflowMenu
+                                  items={tutorListCardMenu(
+                                    t,
+                                    openBookingModal,
+                                    openTutorProfile,
+                                    openMessageForTutor
+                                  )}
+                                />
                               </div>
                             </div>
                             <SubjectChips
@@ -1549,13 +1667,13 @@ export function DashboardPage({ session }: { session: Session }) {
                 setQuery={setQuery}
                 level={level}
                 setLevel={setLevel}
-                mode={mode}
-                setMode={setMode}
                 filteredTutors={filteredTutors.filter(
                   (t) => !parentExistingTutorIds.has(t.id)
                 )}
                 existingTutorIds={new Set()}
                 onBook={openBookingModal}
+                onViewProfile={openTutorProfile}
+                onMessage={openMessageForTutor}
               />
             ) : (
               <section className="card">
@@ -2182,6 +2300,94 @@ export function DashboardPage({ session }: { session: Session }) {
                   </div>
                 </div>
               </>
+            )}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!profileTutor}
+        title={profileTutor ? `Tutor profile — ${profileTutor.name}` : 'Tutor profile'}
+        onClose={() => setProfileTutor(null)}
+        footer={
+          profileTutor ? (
+            <>
+              <button className="btn" onClick={() => setProfileTutor(null)}>
+                Close
+              </button>
+              <button
+                className={`btn btn-primary ${
+                  session.role === 'parent' ? 'btn-parent' : 'btn-student'
+                }`}
+                onClick={() => openMessageForTutor(profileTutor)}
+              >
+                {Icons.Message({ size: 16 })}
+                Message tutor
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {profileTutor ? (
+          <div className="grid" style={{ gap: 12 }}>
+            <div className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
+              <div className="card-inner">
+                <div className="card-header">
+                  <div>
+                    <h3 style={{ fontSize: 18 }}>{profileTutor.name}</h3>
+                    <p className="muted" style={{ marginTop: 6 }}>
+                      {profileTutor.city ?? 'Location not provided'}
+                      {profileTutor.level ? ` • ${profileTutor.level}` : ''}
+                      {profileTutor.yearsExperience
+                        ? ` • ${profileTutor.yearsExperience} years experience`
+                        : ''}
+                    </p>
+                  </div>
+                  {profileTutor.rating ? (
+                    <span className="pill">
+                      {Icons.Star({ size: 14 })} {profileTutor.rating.toFixed(1)}
+                    </span>
+                  ) : null}
+                </div>
+                <SubjectChips
+                  level={profileTutor.level}
+                  subjects={profileTutor.subjects}
+                  maxVisible={6}
+                />
+                {profileTutor.shortBio ? (
+                  <p className="subtle" style={{ marginTop: 10 }}>
+                    {profileTutor.shortBio}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {(session.role === 'student' || session.role === 'parent') && (
+              <div className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
+                <div className="card-inner">
+                  <div className="label">Credentials</div>
+                  {profileTutor.credentials?.length ? (
+                    <div className="grid" style={{ gap: 8, marginTop: 10 }}>
+                      {profileTutor.credentials.map((cred) => (
+                        <a
+                          key={cred.id}
+                          className="btn"
+                          href={cred.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {Icons.CheckBook({ size: 16 })}
+                          {cred.fileName}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted" style={{ marginTop: 8 }}>
+                      No uploaded credentials available for this tutor yet.
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         ) : null}
