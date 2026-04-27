@@ -12,6 +12,9 @@ export type TutorProfile = {
   rating: number
   /** Weekly availability slots ("Mon:morning", "Tue:evening", ...). */
   availability: string[]
+  yearsExperience?: string
+  shortBio?: string
+  credentials?: Array<{ id: string; title: string; fileName: string; url: string }>
 }
 
 export const tutorProfiles: TutorProfile[] = [
@@ -25,6 +28,16 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 88,
     city: 'Quezon City',
     rating: 4.8,
+    yearsExperience: '5',
+    shortBio: 'Math-focused tutor helping students build mastery and confidence.',
+    credentials: [
+      {
+        id: 'c-t1-1',
+        title: 'BS Mathematics Diploma',
+        fileName: 'santos-bs-math.pdf',
+        url: '#',
+      },
+    ],
     availability: [
       'Mon:evening',
       'Tue:evening',
@@ -44,6 +57,16 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 63,
     city: 'Manila',
     rating: 4.7,
+    yearsExperience: '4',
+    shortBio: 'English and writing tutor focused on clear structure and expression.',
+    credentials: [
+      {
+        id: 'c-t2-1',
+        title: 'Teaching Certificate',
+        fileName: 'delacruz-teaching-cert.pdf',
+        url: '#',
+      },
+    ],
     availability: [
       'Mon:afternoon',
       'Wed:afternoon',
@@ -62,6 +85,16 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 41,
     city: 'Cebu City',
     rating: 4.9,
+    yearsExperience: '6',
+    shortBio: 'Science tutor with strong coaching for biology and exam prep.',
+    credentials: [
+      {
+        id: 'c-t3-1',
+        title: 'BS Biology Diploma',
+        fileName: 'reyes-biology-diploma.pdf',
+        url: '#',
+      },
+    ],
     availability: [
       'Tue:morning',
       'Tue:afternoon',
@@ -80,6 +113,8 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 52,
     city: 'Quezon City',
     rating: 4.6,
+    yearsExperience: '3',
+    shortBio: 'Filipino and AP tutor focused on comprehension and critical thinking.',
     availability: ['Mon:afternoon', 'Wed:afternoon', 'Fri:afternoon'],
   },
   {
@@ -92,6 +127,8 @@ export const tutorProfiles: TutorProfile[] = [
     classesCount: 71,
     city: 'Makati',
     rating: 4.8,
+    yearsExperience: '7',
+    shortBio: 'STEM tutor specializing in chemistry and physics for SHS learners.',
     availability: [
       'Mon:evening',
       'Wed:evening',

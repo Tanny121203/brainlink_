@@ -36,6 +36,30 @@ export async function handler(event) {
     }
     if (user.role !== role) return withCors(json(401, { error: 'Role does not match account' }))
 
+    let profile = user.profile
+    if (user.role === 'tutor') {
+      const credentials = await sql`
+        SELECT id, file_name, mime_type, size_bytes, data_url, uploaded_at
+        FROM tutor_credentials
+        WHERE tutor_user_id = ${user.id}
+        ORDER BY uploaded_at DESC
+      `
+      profile = {
+        ...(profile && typeof profile === 'object' ? profile : {}),
+        credentials: credentials.map((row) => ({
+          id: row.id,
+          fileName: row.file_name,
+          mimeType: row.mime_type,
+          sizeBytes: row.size_bytes,
+          dataUrl: row.data_url,
+          uploadedAtIso:
+            row.uploaded_at instanceof Date
+              ? row.uploaded_at.toISOString()
+              : String(row.uploaded_at),
+        })),
+      }
+    }
+
     const token = createSignedToken({ sub: user.id, email: user.email, role: user.role })
     const response = withCors(
       json(200, {
@@ -43,7 +67,7 @@ export async function handler(event) {
           role: user.role,
           email: user.email,
           displayName: user.display_name,
-          profile: user.profile,
+          profile,
         },
       })
     )

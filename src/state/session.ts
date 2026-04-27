@@ -28,6 +28,16 @@ export type TutorProfile = {
   city?: string
   shortBio?: string
   photoDataUrl?: string
+  credentials?: TutorCredential[]
+}
+
+export type TutorCredential = {
+  id: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  uploadedAtIso: string
+  dataUrl: string
 }
 
 const STORAGE_KEY = 'brainlink.session.v1'

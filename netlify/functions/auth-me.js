@@ -19,13 +19,36 @@ export async function handler(event) {
     `
     if (rows.length === 0) return withCors(json(401, { error: 'Unauthorized' }))
     const user = rows[0]
+    let profile = user.profile
+    if (user.role === 'tutor') {
+      const credentials = await sql`
+        SELECT id, file_name, mime_type, size_bytes, data_url, uploaded_at
+        FROM tutor_credentials
+        WHERE tutor_user_id = ${String(auth.sub)}
+        ORDER BY uploaded_at DESC
+      `
+      profile = {
+        ...(profile && typeof profile === 'object' ? profile : {}),
+        credentials: credentials.map((row) => ({
+          id: row.id,
+          fileName: row.file_name,
+          mimeType: row.mime_type,
+          sizeBytes: row.size_bytes,
+          dataUrl: row.data_url,
+          uploadedAtIso:
+            row.uploaded_at instanceof Date
+              ? row.uploaded_at.toISOString()
+              : String(row.uploaded_at),
+        })),
+      }
+    }
     return withCors(
       json(200, {
         session: {
           role: user.role,
           email: user.email,
           displayName: user.display_name,
-          profile: user.profile,
+          profile,
         },
       })
     )

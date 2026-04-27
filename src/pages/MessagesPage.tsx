@@ -56,6 +56,7 @@ export function MessagesPanel({ session }: { session: Session }) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const requestId = params.get('request')
+  const tutorNameParam = params.get('tutor')
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -253,6 +254,7 @@ export function MessagesPanel({ session }: { session: Session }) {
 
   const titleName =
     needFromMock?.studentName ??
+    tutorNameParam ??
     timelineMessages.find((m): m is SharedThreadOfferMessage => m.kind === 'offer')
       ?.studentName ??
     'Conversation'
@@ -266,6 +268,8 @@ export function MessagesPanel({ session }: { session: Session }) {
             subtitle={
               needFromMock
                 ? `${needFromMock.subject} • ${needFromMock.goal}`
+                : tutorNameParam
+                  ? `Conversation with tutor ${tutorNameParam}`
                 : timelineMessages[0]
                   ? `${timelineMessages[0].subject}`
                   : ''
