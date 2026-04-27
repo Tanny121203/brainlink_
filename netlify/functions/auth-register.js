@@ -19,6 +19,12 @@ const ALLOWED_CREDENTIAL_MIME_TYPES = new Set([
 const MAX_CREDENTIALS = 5
 const MAX_CREDENTIAL_SIZE_BYTES = 5 * 1024 * 1024
 
+function isMissingTutorCredentialsTable(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const message = String(error?.message || error || '').toLowerCase()
+  return code === '42P01' || message.includes('relation') && message.includes('tutor_credentials')
+}
+
 function sanitizeTutorProfile(profile) {
   if (!profile || typeof profile !== 'object') return null
   const raw = profile
@@ -89,21 +95,25 @@ export async function handler(event) {
     `
     if (role === 'tutor') {
       const credentials = Array.isArray(profile?.credentials) ? profile.credentials : []
-      for (const cred of credentials) {
-        await sql`
-          INSERT INTO tutor_credentials (
-            id, tutor_user_id, file_name, mime_type, size_bytes, data_url, uploaded_at
-          )
-          VALUES (
-            ${id('cred')},
-            ${userId},
-            ${cred.fileName},
-            ${cred.mimeType},
-            ${cred.sizeBytes},
-            ${cred.dataUrl},
-            ${cred.uploadedAtIso}
-          )
-        `
+      try {
+        for (const cred of credentials) {
+          await sql`
+            INSERT INTO tutor_credentials (
+              id, tutor_user_id, file_name, mime_type, size_bytes, data_url, uploaded_at
+            )
+            VALUES (
+              ${id('cred')},
+              ${userId},
+              ${cred.fileName},
+              ${cred.mimeType},
+              ${cred.sizeBytes},
+              ${cred.dataUrl},
+              ${cred.uploadedAtIso}
+            )
+          `
+        }
+      } catch (error) {
+        if (!isMissingTutorCredentialsTable(error)) throw error
       }
     }
 
