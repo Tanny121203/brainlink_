@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react'
 import { Icons } from './icons'
 import {
   updateSession,
+  type TutorCredential,
   type ParentProfile,
   type Session,
   type StudentProfile,
   type TutorProfile,
 } from '../state/session'
 import { toast } from './Toast'
+import { updateServerTutorProfile } from '../state/serverApi'
 
 type Props = {
   session: Session
@@ -48,6 +50,8 @@ export function ProfileSection({ session, onUpdated }: Props) {
           shortBio: '',
         }
   )
+  const [newCredentials, setNewCredentials] = useState<TutorCredential[]>([])
+  const [credentialError, setCredentialError] = useState<string | null>(null)
 
   const title = useMemo(() => {
     if (session.role === 'student') return 'Your profile'
@@ -55,13 +59,54 @@ export function ProfileSection({ session, onUpdated }: Props) {
     return 'Tutor profile'
   }, [session.role])
 
-  function handleSave() {
+  async function handleSave() {
     const nextProfile =
       session.role === 'student'
         ? studentFields
         : session.role === 'parent'
           ? parentFields
           : tutorFields
+
+    if (session.role === 'tutor') {
+      try {
+        const result = await updateServerTutorProfile({
+          profile: {
+            subjects: tutorFields.subjects ?? '',
+            yearsExperience: tutorFields.yearsExperience ?? '',
+            city: tutorFields.city,
+            shortBio: tutorFields.shortBio,
+            photoDataUrl: tutorFields.photoDataUrl,
+          },
+          newCredentials: newCredentials.map((cred) => ({
+            fileName: cred.fileName,
+            mimeType: cred.mimeType,
+            sizeBytes: cred.sizeBytes,
+            uploadedAtIso: cred.uploadedAtIso,
+            dataUrl: cred.dataUrl,
+          })),
+        })
+        const next = updateSession({
+          displayName: displayName.trim() || session.displayName,
+          email: email.trim() || session.email,
+          profile: {
+            ...tutorFields,
+            credentials: [
+              ...((tutorFields.credentials as TutorCredential[] | undefined) ?? []),
+              ...(result.profile.credentials ?? []),
+            ],
+          },
+        })
+        setNewCredentials([])
+        if (next) {
+          toast.success('Profile updated.')
+          onUpdated?.(next)
+        }
+        return
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not update tutor profile.')
+        return
+      }
+    }
 
     const next = updateSession({
       displayName: displayName.trim() || session.displayName,
@@ -73,6 +118,56 @@ export function ProfileSection({ session, onUpdated }: Props) {
       toast.success('Profile updated.')
       onUpdated?.(next)
     }
+  }
+
+  const handleCredentialUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCredentialError(null)
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    const allowedTypes = new Set([
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+    ])
+    const MAX_FILE_BYTES = 5 * 1024 * 1024
+    const MAX_FILES = 5
+    const current = (tutorFields.credentials?.length ?? 0) + newCredentials.length
+    if (current + files.length > MAX_FILES) {
+      setCredentialError('You can have up to 5 credentials in total.')
+      return
+    }
+
+    const added: TutorCredential[] = []
+    for (const file of files) {
+      if (!allowedTypes.has(file.type)) {
+        setCredentialError('Only PDF, PNG, JPG, and WEBP files are allowed.')
+        return
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        setCredentialError(`"${file.name}" is too large. Max size is 5 MB.`)
+        return
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read file.'))
+        reader.onerror = () => reject(new Error('Could not read file.'))
+        reader.readAsDataURL(file)
+      })
+      added.push({
+        id: `cred-temp-${Math.random().toString(36).slice(2, 8)}`,
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        uploadedAtIso: new Date().toISOString(),
+        dataUrl,
+      })
+    }
+    setNewCredentials((prev) => [...prev, ...added])
+    e.target.value = ''
   }
 
   return (
@@ -259,6 +354,82 @@ export function ProfileSection({ session, onUpdated }: Props) {
                 placeholder="Tell students what makes your teaching style effective."
                 style={{ resize: 'vertical' }}
               />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">Uploaded credentials</div>
+              {tutorFields.credentials?.length ? (
+                <div className="grid" style={{ gap: 8 }}>
+                  {tutorFields.credentials.map((cred) => (
+                    <a
+                      key={cred.id}
+                      href={cred.dataUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn"
+                    >
+                      {Icons.CheckBook({ size: 16 })}
+                      {cred.fileName}
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">No credentials uploaded yet.</p>
+              )}
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">Add credentials</div>
+              <label className="btn btn-elevated tutor-photo-btn">
+                {Icons.Send({ size: 16 })}
+                Upload files
+                <input
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/webp"
+                  multiple
+                  onChange={handleCredentialUpload}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {newCredentials.length ? (
+                <div className="grid" style={{ gap: 8, marginTop: 8 }}>
+                  {newCredentials.map((cred) => (
+                    <div
+                      key={cred.id}
+                      className="card"
+                      style={{ background: 'rgba(255,255,255,0.62)' }}
+                    >
+                      <div className="card-inner" style={{ padding: '10px 12px' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                          }}
+                        >
+                          <div className="muted">{cred.fileName}</div>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() =>
+                              setNewCredentials((prev) =>
+                                prev.filter((x) => x.id !== cred.id)
+                              )
+                            }
+                          >
+                            {Icons.Trash({ size: 14 })}
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {credentialError ? (
+                <p className="muted" style={{ color: '#a6262b' }}>
+                  {credentialError}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}
