@@ -706,6 +706,58 @@ main.grid {
   cursor: pointer;
 }
 
+.credential-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.credential-card {
+  display: grid;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 10px;
+}
+
+.credential-preview-frame {
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(44, 52, 54, 0.04);
+}
+
+.credential-preview-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.credential-meta {
+  min-width: 0;
+}
+
+.credential-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-header);
+  overflow-wrap: anywhere;
+}
+
+.credential-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-body);
+}
+
 .chip-option,
 .subject-chip {
   appearance: none;

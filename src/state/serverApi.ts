@@ -65,6 +65,11 @@ export type ServerTutor = {
   name: string
   email: string
   subjects: string[]
+  level?: 'Elementary' | 'JHS' | 'SHS' | 'College'
+  mode?: 'Online' | 'In-person' | 'Hybrid'
+  hourlyRate?: number
+  rating?: number
+  availability?: string[]
   city: string
   yearsExperience: string
   shortBio: string

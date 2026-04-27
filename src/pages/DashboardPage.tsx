@@ -30,6 +30,7 @@ import { MessagesPanel } from './MessagesPage'
 import { NotesPanel } from './NotesPage'
 import { recordTutorSentOffer } from '../state/inbox'
 import { ProfileSection } from '../components/ProfileSection'
+import { CredentialPreviewCard } from '../components/CredentialPreviewCard'
 import { AvailabilityGrid } from '../components/AvailabilityGrid'
 import { ReviewModal } from '../components/ReviewModal'
 import { OverflowMenu, type OverflowMenuItem } from '../components/OverflowMenu'
@@ -104,18 +105,29 @@ type TutorProfileViewData = {
 }
 
 function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
+  const validLevel =
+    tutor.level === 'Elementary' ||
+    tutor.level === 'JHS' ||
+    tutor.level === 'SHS' ||
+    tutor.level === 'College'
+      ? tutor.level
+      : 'JHS'
+  const validMode =
+    tutor.mode === 'Online' || tutor.mode === 'In-person' || tutor.mode === 'Hybrid'
+      ? tutor.mode
+      : 'Online'
   const subjects = tutor.subjects.length ? tutor.subjects : ['General tutoring']
   return {
     id: tutor.id,
     name: tutor.name,
     subjects,
-    level: 'JHS',
-    mode: 'Online',
-    hourlyRate: 450,
+    level: validLevel,
+    mode: validMode,
+    hourlyRate: tutor.hourlyRate || 450,
     classesCount: 0,
     city: tutor.city || 'N/A',
-    rating: 5,
-    availability: [],
+    rating: tutor.rating || 5,
+    availability: tutor.availability || [],
     yearsExperience: tutor.yearsExperience || undefined,
     shortBio: tutor.shortBio || undefined,
     credentials: tutor.credentials.map((cred) => ({
@@ -382,10 +394,12 @@ function tutorListCardMenu(
 }
 
 function YourTutorsStudentList({
+  tutorDirectory,
   onBook,
   onViewProfile,
   onMessage,
 }: {
+  tutorDirectory: TutorProfile[]
   onBook?: (tutor: TutorProfile) => void
   onViewProfile?: (tutor: TutorProfile) => void
   onMessage?: (tutor: TutorProfile) => void
@@ -399,7 +413,7 @@ function YourTutorsStudentList({
         />
         <div className="grid" style={{ gap: 10, marginTop: 12 }}>
           {studentTutors.map((rel) => {
-            const t = tutorProfiles.find((x) => x.id === rel.tutorId)
+            const t = tutorDirectory.find((x) => x.id === rel.tutorId)
             if (!t) return null
             return (
               <div
@@ -453,10 +467,13 @@ function StudentTutorsBrowseHub({
   level,
   setLevel,
   filteredTutors,
+  tutorDirectory,
   existingTutorIds,
   onBook,
   onViewProfile,
   onMessage,
+  loading,
+  error,
 }: {
   tutorView: 'discover' | 'my'
   setTutorView: (v: 'discover' | 'my') => void
@@ -465,10 +482,13 @@ function StudentTutorsBrowseHub({
   level: 'All' | TutorProfile['level']
   setLevel: (v: 'All' | TutorProfile['level']) => void
   filteredTutors: TutorProfile[]
+  tutorDirectory: TutorProfile[]
   existingTutorIds: Set<string>
   onBook?: (tutor: TutorProfile) => void
   onViewProfile?: (tutor: TutorProfile) => void
   onMessage?: (tutor: TutorProfile) => void
+  loading?: boolean
+  error?: string | null
 }) {
   const discoveryTutors = useMemo(
     () => filteredTutors.filter((t) => !existingTutorIds.has(t.id)),
@@ -515,6 +535,7 @@ function StudentTutorsBrowseHub({
 
       {tutorView === 'my' ? (
         <YourTutorsStudentList
+          tutorDirectory={tutorDirectory}
           onBook={onBook}
           onViewProfile={onViewProfile}
           onMessage={onMessage}
@@ -532,6 +553,8 @@ function StudentTutorsBrowseHub({
           onBook={onBook}
           onViewProfile={onViewProfile}
           onMessage={onMessage}
+          loading={loading}
+          error={error}
         />
       )}
     </section>
@@ -550,6 +573,8 @@ function BrowseTutorsDiscover({
   onBook,
   onViewProfile,
   onMessage,
+  loading,
+  error,
 }: {
   title: string
   subtitle: string
@@ -563,6 +588,8 @@ function BrowseTutorsDiscover({
   onBook?: (tutor: TutorProfile) => void
   onViewProfile?: (tutor: TutorProfile) => void
   onMessage?: (tutor: TutorProfile) => void
+  loading?: boolean
+  error?: string | null
 }) {
   return (
     <section className="grid" style={{ gap: 14 }}>
@@ -614,10 +641,32 @@ function BrowseTutorsDiscover({
               {Icons.Filter({ size: 16 })}
               Clear filters
             </button>
-            <button className="btn">Save search</button>
+            <button
+              className="btn"
+              onClick={() => {
+                localStorage.setItem(
+                  'brainlink.savedTutorSearch.v1',
+                  JSON.stringify({ query, level, savedAt: Date.now() })
+                )
+                toast.success('Search saved.')
+              }}
+            >
+              Save search
+            </button>
           </div>
         </div>
       </div>
+
+      {loading ? <p className="muted">Loading tutors...</p> : null}
+      {error ? (
+        <div className="card" style={{ background: 'rgba(255, 221, 221, 0.45)' }}>
+          <div className="card-inner">
+            <p className="muted" style={{ color: '#a6262b' }}>
+              Could not load live tutor accounts: {error}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <section className="grid grid-2">
         {filteredTutors.map((t) => (
@@ -702,6 +751,8 @@ export function DashboardPage({ session }: { session: Session }) {
     'discover'
   )
   const [serverTutors, setServerTutors] = useState<ServerTutor[]>([])
+  const [tutorsLoading, setTutorsLoading] = useState(false)
+  const [tutorsError, setTutorsError] = useState<string | null>(null)
   const [profileTutor, setProfileTutor] = useState<TutorProfileViewData | null>(null)
 
   const [detailsNeedId, setDetailsNeedId] = useState<string | null>(null)
@@ -761,20 +812,32 @@ export function DashboardPage({ session }: { session: Session }) {
 
   useEffect(() => {
     if (session.role === 'tutor') return
+    const shouldFetch =
+      session.role === 'student'
+        ? section === 'student.browse'
+        : section === 'parent.find' || section === 'parent.tutors'
+    if (!shouldFetch) return
     let alive = true
+    setTutorsLoading(true)
+    setTutorsError(null)
     fetchServerTutors()
       .then((result) => {
         if (!alive) return
         setServerTutors(result.tutors)
       })
-      .catch(() => {
+      .catch((error) => {
         if (!alive) return
+        setTutorsError(error instanceof Error ? error.message : 'Could not load tutors.')
         setServerTutors([])
+      })
+      .finally(() => {
+        if (!alive) return
+        setTutorsLoading(false)
       })
     return () => {
       alive = false
     }
-  }, [session.role])
+  }, [session.role, section])
 
   const tutorDirectory = useMemo<TutorProfile[]>(() => {
     const byId = new Map<string, TutorProfile>()
@@ -930,6 +993,17 @@ export function DashboardPage({ session }: { session: Session }) {
     q.set('tutorId', tutor.id)
     q.set('tutor', tutor.name)
     navigate(`/app/messages?${q.toString()}`)
+  }
+
+  function openNotesForTutor(tutor: { id: string; name?: string }) {
+    const q = new URLSearchParams()
+    q.set('tutorId', tutor.id)
+    if (tutor.name) q.set('tutor', tutor.name)
+    navigate(`/app/notes?${q.toString()}`)
+  }
+
+  function startSessionAction(title: string) {
+    toast.info(`Starting session flow for "${title}" is ready for integration.`)
   }
 
   function closeBookingModal() {
@@ -1350,16 +1424,35 @@ export function DashboardPage({ session }: { session: Session }) {
                               </div>
                             </div>
                             <div className="btn-row" style={{ marginTop: 10 }}>
-                              <button className="btn">
+                              <button
+                                className="btn"
+                                onClick={() =>
+                                  openMessageForTutor({
+                                    id: s.tutorId,
+                                    name: tutor?.name ?? s.tutorName ?? 'Tutor',
+                                  })
+                                }
+                              >
                                 {Icons.Message({ size: 16 })}
                                 Message
                               </button>
-                              <button className="btn">
+                              <button
+                                className="btn"
+                                onClick={() =>
+                                  openNotesForTutor({
+                                    id: s.tutorId,
+                                    name: tutor?.name ?? s.tutorName,
+                                  })
+                                }
+                              >
                                 {Icons.CheckBook({ size: 16 })}
                                 Notes
                               </button>
                               {s.status === 'Upcoming' ? (
-                                <button className="btn btn-primary btn-student">
+                                <button
+                                  className="btn btn-primary btn-student"
+                                  onClick={() => startSessionAction(s.title)}
+                                >
                                   {Icons.Send({ size: 16 })}
                                   Join
                                 </button>
@@ -1381,10 +1474,13 @@ export function DashboardPage({ session }: { session: Session }) {
                 level={level}
                 setLevel={setLevel}
                 filteredTutors={filteredTutors}
+                tutorDirectory={tutorDirectory}
                 existingTutorIds={studentExistingTutorIds}
                 onBook={openBookingModal}
                 onViewProfile={openTutorProfile}
                 onMessage={openMessageForTutor}
+                loading={tutorsLoading}
+                error={tutorsError}
               />
             ) : section === 'student.profile' ? (
               <ProfileSection session={session} />
@@ -1414,11 +1510,17 @@ export function DashboardPage({ session }: { session: Session }) {
                             <StatusPill text={t.status} tone={todoTone(t)} />
                           </div>
                           <div className="btn-row" style={{ marginTop: 10 }}>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => toast.info(`Opened task: ${t.title}`)}
+                            >
                               {Icons.CheckBook({ size: 16 })}
                               Open
                             </button>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => toast.success(`Marked as done: ${t.title}`)}
+                            >
                               {Icons.Send({ size: 16 })}
                               Mark done
                             </button>
@@ -1461,7 +1563,11 @@ export function DashboardPage({ session }: { session: Session }) {
                     <SectionTitle
                       title="Next up"
                       subtitle="The soonest session and most urgent to‑do."
-                      right={<button className="btn">{Icons.Dashboard({ size: 16 })} Open</button>}
+                      right={
+                        <button className="btn" onClick={() => setSection('student.sessions')}>
+                          {Icons.Dashboard({ size: 16 })} Open
+                        </button>
+                      }
                     />
                     <div className="grid grid-2" style={{ marginTop: 12 }}>
                       <div className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
@@ -1535,11 +1641,27 @@ export function DashboardPage({ session }: { session: Session }) {
                               </div>
                             </div>
                             <div className="btn-row" style={{ marginTop: 10 }}>
-                              <button className="btn">
+                              <button
+                                className="btn"
+                                onClick={() =>
+                                  openMessageForTutor({
+                                    id: s.tutorId,
+                                    name: tutor?.name ?? s.tutorName ?? 'Tutor',
+                                  })
+                                }
+                              >
                                 {Icons.Message({ size: 16 })}
                                 Message tutor
                               </button>
-                              <button className="btn">
+                              <button
+                                className="btn"
+                                onClick={() =>
+                                  openNotesForTutor({
+                                    id: s.tutorId,
+                                    name: tutor?.name ?? s.tutorName,
+                                  })
+                                }
+                              >
                                 {Icons.CheckBook({ size: 16 })}
                                 Notes
                               </button>
@@ -1566,7 +1688,7 @@ export function DashboardPage({ session }: { session: Session }) {
                   />
                   <div className="grid" style={{ gap: 10, marginTop: 12 }}>
                     {parentTutors.map((rel) => {
-                      const t = tutorProfiles.find((x) => x.id === rel.tutorId)
+                      const t = tutorDirectory.find((x) => x.id === rel.tutorId)
                       if (!t) return null
                       return (
                         <div
@@ -1642,11 +1764,17 @@ export function DashboardPage({ session }: { session: Session }) {
                             <StatusPill text={t.status} tone={todoTone(t)} />
                           </div>
                           <div className="btn-row" style={{ marginTop: 10 }}>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => toast.info(`Viewing task: ${t.title}`)}
+                            >
                               {Icons.CheckBook({ size: 16 })}
                               View
                             </button>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => navigate('/app/messages')}
+                            >
                               {Icons.Message({ size: 16 })}
                               Ask tutor
                             </button>
@@ -1674,6 +1802,8 @@ export function DashboardPage({ session }: { session: Session }) {
                 onBook={openBookingModal}
                 onViewProfile={openTutorProfile}
                 onMessage={openMessageForTutor}
+                loading={tutorsLoading}
+                error={tutorsError}
               />
             ) : (
               <section className="card">
@@ -1827,11 +1957,21 @@ export function DashboardPage({ session }: { session: Session }) {
                             />
                           </div>
                           <div className="btn-row" style={{ marginTop: 10 }}>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() =>
+                                navigate(`/app/messages?request=${encodeURIComponent(o.requestId)}`)
+                              }
+                            >
                               {Icons.Message({ size: 16 })}
                               Message
                             </button>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() =>
+                                toast.info(`Offer details: ${o.subject} • ${o.toStudentName}`)
+                              }
+                            >
                               {Icons.CheckBook({ size: 16 })}
                               View offer
                             </button>
@@ -1871,11 +2011,17 @@ export function DashboardPage({ session }: { session: Session }) {
                             />
                           </div>
                           <div className="btn-row" style={{ marginTop: 10 }}>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => navigate('/app/messages')}
+                            >
                               {Icons.Message({ size: 16 })}
                               Message
                             </button>
-                            <button className="btn">
+                            <button
+                              className="btn"
+                              onClick={() => setSection('tutor.sessions')}
+                            >
                               {Icons.Calendar({ size: 16 })}
                               Schedule
                             </button>
@@ -2005,11 +2151,17 @@ export function DashboardPage({ session }: { session: Session }) {
                                 <StatusPill text={s.status} tone={s.status === 'Completed' ? 'good' : 'neutral'} />
                               </div>
                               <div className="btn-row" style={{ marginTop: 10 }}>
-                                <button className="btn">
+                                <button
+                                  className="btn"
+                                  onClick={() => navigate('/app/messages')}
+                                >
                                   {Icons.Message({ size: 16 })}
                                   Message
                                 </button>
-                                <button className="btn btn-primary btn-tutor">
+                                <button
+                                  className="btn btn-primary btn-tutor"
+                                  onClick={() => startSessionAction(s.subject)}
+                                >
                                   {Icons.Send({ size: 16 })}
                                   Start
                                 </button>
@@ -2367,18 +2519,9 @@ export function DashboardPage({ session }: { session: Session }) {
                 <div className="card-inner">
                   <div className="label">Credentials</div>
                   {profileTutor.credentials?.length ? (
-                    <div className="grid" style={{ gap: 8, marginTop: 10 }}>
+                    <div className="credential-grid" style={{ marginTop: 10 }}>
                       {profileTutor.credentials.map((cred) => (
-                        <a
-                          key={cred.id}
-                          className="btn"
-                          href={cred.dataUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {Icons.CheckBook({ size: 16 })}
-                          {cred.fileName}
-                        </a>
+                        <CredentialPreviewCard key={cred.id} cred={cred} />
                       ))}
                     </div>
                   ) : (

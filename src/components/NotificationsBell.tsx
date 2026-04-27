@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Icons } from './icons'
 import type { Role } from '../state/session'
 import {
@@ -11,6 +12,7 @@ import {
 } from '../state/notifications'
 
 export function NotificationsBell({ role }: { role: Role }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [readIds, setReadIds] = useState<Set<string>>(() => getReadIds())
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -48,6 +50,11 @@ export function NotificationsBell({ role }: { role: Role }) {
       markRead(n.id)
       setReadIds(new Set(getReadIds()))
     }
+    if (n.kind === 'message') navigate('/app/messages')
+    else if (n.kind === 'session') navigate('/app')
+    else if (n.kind === 'offer') navigate('/app/messages')
+    else navigate('/app')
+    setOpen(false)
   }
 
   function onMarkAll() {

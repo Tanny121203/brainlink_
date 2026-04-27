@@ -10,6 +10,7 @@ import {
 } from '../state/session'
 import { toast } from './Toast'
 import { updateServerTutorProfile } from '../state/serverApi'
+import { CredentialPreviewCard } from './CredentialPreviewCard'
 
 type Props = {
   session: Session
@@ -358,18 +359,9 @@ export function ProfileSection({ session, onUpdated }: Props) {
             <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="label">Uploaded credentials</div>
               {tutorFields.credentials?.length ? (
-                <div className="grid" style={{ gap: 8 }}>
+                <div className="credential-grid">
                   {tutorFields.credentials.map((cred) => (
-                    <a
-                      key={cred.id}
-                      href={cred.dataUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn"
-                    >
-                      {Icons.CheckBook({ size: 16 })}
-                      {cred.fileName}
-                    </a>
+                    <CredentialPreviewCard key={cred.id} cred={cred} />
                   ))}
                 </div>
               ) : (
