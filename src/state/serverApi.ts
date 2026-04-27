@@ -83,3 +83,35 @@ export async function fetchServerTutors() {
   return apiRequest<{ tutors: ServerTutor[] }>('tutors', { method: 'GET' })
 }
 
+export async function updateServerTutorProfile(payload: {
+  profile: {
+    subjects: string
+    yearsExperience: string
+    city?: string
+    shortBio?: string
+    photoDataUrl?: string
+  }
+  newCredentials: Array<{
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    uploadedAtIso: string
+    dataUrl: string
+  }>
+}) {
+  return apiRequest<{
+    ok: boolean
+    profile: {
+      subjects: string
+      yearsExperience: string
+      city?: string
+      shortBio?: string
+      photoDataUrl?: string
+      credentials?: ServerTutor['credentials']
+    }
+  }>('tutors', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
