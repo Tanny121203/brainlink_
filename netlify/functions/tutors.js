@@ -39,6 +39,12 @@ function isMissingTutorCredentialsTable(error) {
   return code === '42P01' || (message.includes('relation') && message.includes('tutor_credentials'))
 }
 
+function isMissingTutorAvailabilityTable(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const message = String(error?.message || error || '').toLowerCase()
+  return code === '42P01' || (message.includes('relation') && message.includes('tutor_availability'))
+}
+
 function normalizeTutorProfile(profile) {
   if (!profile || typeof profile !== 'object') return {}
   return profile
@@ -113,9 +119,29 @@ export async function handler(event) {
         if (!isMissingTutorCredentialsTable(error)) throw error
       }
 
+      let availabilityByEmail = new Map()
+      try {
+        const availabilityRows = await sql`
+          SELECT owner_email, slot_key
+          FROM tutor_availability
+          WHERE is_open = true
+          ORDER BY owner_email ASC, slot_key ASC
+        `
+        for (const row of availabilityRows) {
+          const key = String(row.owner_email || '').toLowerCase()
+          if (!key) continue
+          if (!availabilityByEmail.has(key)) availabilityByEmail.set(key, [])
+          availabilityByEmail.get(key).push(String(row.slot_key || ''))
+        }
+      } catch (error) {
+        if (!isMissingTutorAvailabilityTable(error)) throw error
+      }
+
       const tutors = rows.map((row) => {
         const profile = normalizeTutorProfile(row.profile)
         const subjects = toArray(profile.subjects)
+        const email = String(row.email || '').toLowerCase()
+        const availabilityFromDb = availabilityByEmail.get(email)
         const credentials =
           credentialsByTutor.get(String(row.id)) ??
           (Array.isArray(profile.credentials) ? profile.credentials : [])
@@ -132,9 +158,11 @@ export async function handler(event) {
             : undefined,
           hourlyRate: Number(profile.hourlyRate || 0) || undefined,
           rating: Number(profile.rating || 0) || undefined,
-          availability: Array.isArray(profile.availability)
-            ? profile.availability.map((x) => String(x || ''))
-            : undefined,
+          availability:
+            availabilityFromDb ??
+            (Array.isArray(profile.availability)
+              ? profile.availability.map((x) => String(x || ''))
+              : undefined),
           city: String(profile.city || ''),
           yearsExperience: String(profile.yearsExperience || ''),
           shortBio: String(profile.shortBio || ''),

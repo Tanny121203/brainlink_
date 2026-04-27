@@ -23,7 +23,12 @@ import {
   type TutorProfile,
 } from '../mock/data'
 import type { Session, TutorCredential } from '../state/session'
-import { fetchServerTutors, type ServerTutor } from '../state/serverApi'
+import {
+  fetchServerAvailability,
+  fetchServerTutors,
+  saveServerAvailability,
+  type ServerTutor,
+} from '../state/serverApi'
 import { SectionTitle, Stat } from '../components/ui'
 import { Icons } from '../components/icons'
 import { MessagesPanel } from './MessagesPage'
@@ -853,6 +858,23 @@ export function DashboardPage({ session }: { session: Session }) {
       const fresh = loadAvailabilityFor(session.email)
       setSavedAvailability(fresh)
       setAvailability(fresh)
+      let alive = true
+      fetchServerAvailability()
+        .then((result) => {
+          if (!alive) return
+          const serverAvailability = createAvailability(result.slots)
+          setSavedAvailability(serverAvailability)
+          setAvailability(serverAvailability)
+          // Keep a local backup so a temporary API outage does not erase tutor edits.
+          saveAvailabilityFor(session.email, serverAvailability)
+        })
+        .catch(() => {
+          if (!alive) return
+          toast.error('Could not load availability from server. Showing your local draft.')
+        })
+      return () => {
+        alive = false
+      }
     }
   }, [session.email, session.role])
 
@@ -869,10 +891,16 @@ export function DashboardPage({ session }: { session: Session }) {
     return a !== b
   }, [availability, savedAvailability])
 
-  function saveAvailability() {
-    saveAvailabilityFor(session.email, availability)
-    setSavedAvailability(new Set(availability))
-    toast.success('Availability saved.')
+  async function saveAvailability() {
+    const next = new Set(availability)
+    try {
+      await saveServerAvailability(Array.from(next))
+      saveAvailabilityFor(session.email, next)
+      setSavedAvailability(next)
+      toast.success('Availability saved.')
+    } catch {
+      toast.error('Could not save availability. Your changes are kept locally until retry.')
+    }
   }
 
   function discardAvailability() {
