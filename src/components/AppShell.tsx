@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { clearSession, getSession } from '../state/session'
+import { getSession, signOutFromServer } from '../state/session'
 import { Icons } from './icons'
 import { toast } from './Toast'
 import { NotificationsBell } from './NotificationsBell'
@@ -64,8 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   ) : null}
                   <button
                     className="btn"
-                    onClick={() => {
-                      clearSession()
+                    onClick={async () => {
+                      await signOutFromServer()
                       toast.info('Signed out. See you soon!')
                       navigate('/', { replace: true })
                     }}

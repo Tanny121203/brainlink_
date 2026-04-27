@@ -5,7 +5,7 @@ import { Icons } from '../components/icons'
 import { Modal } from '../components/Modal'
 import { toast, useDocumentTitle } from '../components/Toast'
 import type { Role } from '../state/session'
-import { getPreferredRole, setPreferredRole, setSession } from '../state/session'
+import { getPreferredRole, setPreferredRole, signInWithServer } from '../state/session'
 
 function roleAccent(role: Role) {
   switch (role) {
@@ -118,15 +118,21 @@ export function SignInPage() {
           <div className="btn-row" style={{ marginTop: 14 }}>
             <button
               className={`btn ${accent.btn}`}
-              onClick={() => {
-                const displayName = email.trim() ? email.split('@')[0] : 'Guest'
-                setSession({
-                  role,
-                  displayName,
-                  email: email.trim() || 'guest@brainlink.local',
-                })
-                toast.success(`Welcome back, ${displayName}!`)
-                nav('/app')
+              onClick={async () => {
+                try {
+                  const cleanEmail = email.trim()
+                  const cleanPassword = password.trim()
+                  if (!cleanEmail || !cleanPassword) {
+                    toast.error('Please enter both email and password.')
+                    return
+                  }
+                  const session = await signInWithServer(role, cleanEmail, cleanPassword)
+                  toast.success(`Welcome back, ${session.displayName}!`)
+                  nav('/app')
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Could not sign in.'
+                  toast.error(message)
+                }
               }}
             >
               {Icons.LogIn({ size: 16 })}
