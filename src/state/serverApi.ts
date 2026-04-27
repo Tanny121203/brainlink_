@@ -60,3 +60,26 @@ export async function addServerThreadMessage(payload: Record<string, unknown>) {
   })
 }
 
+export type ServerTutor = {
+  id: string
+  name: string
+  email: string
+  subjects: string[]
+  city: string
+  yearsExperience: string
+  shortBio: string
+  photoDataUrl?: string
+  credentials: Array<{
+    id: string
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    uploadedAtIso: string
+    dataUrl: string
+  }>
+}
+
+export async function fetchServerTutors() {
+  return apiRequest<{ tutors: ServerTutor[] }>('tutors', { method: 'GET' })
+}
+

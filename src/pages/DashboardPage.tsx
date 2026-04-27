@@ -23,6 +23,7 @@ import {
   type TutorProfile,
 } from '../mock/data'
 import type { Session, TutorCredential } from '../state/session'
+import { fetchServerTutors, type ServerTutor } from '../state/serverApi'
 import { SectionTitle, Stat } from '../components/ui'
 import { Icons } from '../components/icons'
 import { MessagesPanel } from './MessagesPage'
@@ -100,6 +101,30 @@ type TutorProfileViewData = {
   shortBio?: string
   photoDataUrl?: string
   credentials?: TutorCredential[]
+}
+
+function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
+  const subjects = tutor.subjects.length ? tutor.subjects : ['General tutoring']
+  return {
+    id: tutor.id,
+    name: tutor.name,
+    subjects,
+    level: 'JHS',
+    mode: 'Online',
+    hourlyRate: 450,
+    classesCount: 0,
+    city: tutor.city || 'N/A',
+    rating: 5,
+    availability: [],
+    yearsExperience: tutor.yearsExperience || undefined,
+    shortBio: tutor.shortBio || undefined,
+    credentials: tutor.credentials.map((cred) => ({
+      id: cred.id,
+      title: cred.fileName,
+      fileName: cred.fileName,
+      url: cred.dataUrl,
+    })),
+  }
 }
 
 function userToUnified(s: UserSession): UnifiedSession {
@@ -676,6 +701,7 @@ export function DashboardPage({ session }: { session: Session }) {
   const [studentTutorView, setStudentTutorView] = useState<'discover' | 'my'>(
     'discover'
   )
+  const [serverTutors, setServerTutors] = useState<ServerTutor[]>([])
   const [profileTutor, setProfileTutor] = useState<TutorProfileViewData | null>(null)
 
   const [detailsNeedId, setDetailsNeedId] = useState<string | null>(null)
@@ -734,6 +760,32 @@ export function DashboardPage({ session }: { session: Session }) {
   )
 
   useEffect(() => {
+    if (session.role === 'tutor') return
+    let alive = true
+    fetchServerTutors()
+      .then((result) => {
+        if (!alive) return
+        setServerTutors(result.tutors)
+      })
+      .catch(() => {
+        if (!alive) return
+        setServerTutors([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [session.role])
+
+  const tutorDirectory = useMemo<TutorProfile[]>(() => {
+    const byId = new Map<string, TutorProfile>()
+    for (const tutor of tutorProfiles) byId.set(tutor.id, tutor)
+    for (const serverTutor of serverTutors) {
+      byId.set(serverTutor.id, mapServerTutorToCatalogTutor(serverTutor))
+    }
+    return Array.from(byId.values())
+  }, [serverTutors])
+
+  useEffect(() => {
     if (session.role === 'tutor') {
       const fresh = loadAvailabilityFor(session.email)
       setSavedAvailability(fresh)
@@ -767,7 +819,7 @@ export function DashboardPage({ session }: { session: Session }) {
 
   const filteredTutors = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return tutorProfiles.filter((t) => {
+    return tutorDirectory.filter((t) => {
       const matchesQuery =
         !q ||
         t.name.toLowerCase().includes(q) ||
@@ -776,7 +828,7 @@ export function DashboardPage({ session }: { session: Session }) {
       const matchesLevel = level === 'All' || t.level === level
       return matchesQuery && matchesLevel
     })
-  }, [query, level])
+  }, [query, level, tutorDirectory])
 
   const studentExistingTutorIds = useMemo(
     () => new Set(studentTutors.map((r) => r.tutorId)),
@@ -932,7 +984,7 @@ export function DashboardPage({ session }: { session: Session }) {
 
     const tutorName =
       rescheduleTarget.tutorName ??
-      tutorProfiles.find((t) => t.id === rescheduleTarget.tutorId)?.name ??
+      tutorDirectory.find((t) => t.id === rescheduleTarget.tutorId)?.name ??
       'your tutor'
 
     let affectedSessionId = rescheduleTarget.id
@@ -1048,7 +1100,7 @@ export function DashboardPage({ session }: { session: Session }) {
         label: 'Rate tutor',
         icon: Icons.Star,
         onSelect: () => {
-          const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+          const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
           setReviewTarget({
             tutorId: s.tutorId,
             tutorName: tutor?.name ?? s.tutorName ?? 'Tutor',
@@ -1266,7 +1318,7 @@ export function DashboardPage({ session }: { session: Session }) {
                       <p className="muted">No sessions yet. Book a tutor to get started.</p>
                     ) : null}
                     {mergedStudentSessions.map((s) => {
-                      const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
                       const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
@@ -1457,7 +1509,7 @@ export function DashboardPage({ session }: { session: Session }) {
                       <p className="muted">No sessions yet. Book a tutor to schedule one.</p>
                     ) : null}
                     {mergedParentSessions.map((s) => {
-                      const tutor = tutorProfiles.find((t) => t.id === s.tutorId)
+                      const tutor = tutorDirectory.find((t) => t.id === s.tutorId)
                       const menuItems = makeSessionMenuItems(s)
                       return (
                         <div
