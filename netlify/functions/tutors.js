@@ -75,6 +75,16 @@ function sanitizeIncomingCredentials(value) {
   return credentials
 }
 
+function toCredentialSummary(item) {
+  return {
+    id: String(item.id || ''),
+    fileName: String(item.fileName || ''),
+    mimeType: String(item.mimeType || ''),
+    sizeBytes: Number(item.sizeBytes || 0),
+    uploadedAtIso: String(item.uploadedAtIso || ''),
+  }
+}
+
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return handleOptions()
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'PATCH') {
@@ -96,7 +106,7 @@ export async function handler(event) {
       let credentialsByTutor = new Map()
       try {
         const credentialsRows = await sql`
-          SELECT id, tutor_user_id, file_name, mime_type, size_bytes, data_url, uploaded_at
+          SELECT id, tutor_user_id, file_name, mime_type, size_bytes, uploaded_at
           FROM tutor_credentials
           ORDER BY uploaded_at DESC
         `
@@ -108,7 +118,6 @@ export async function handler(event) {
             fileName: String(row.file_name || ''),
             mimeType: String(row.mime_type || ''),
             sizeBytes: Number(row.size_bytes || 0),
-            dataUrl: String(row.data_url || ''),
             uploadedAtIso:
               row.uploaded_at instanceof Date
                 ? row.uploaded_at.toISOString()
@@ -116,7 +125,9 @@ export async function handler(event) {
           })
         }
       } catch (error) {
-        if (!isMissingTutorCredentialsTable(error)) throw error
+        // Credentials are optional for tutor browse. Degrade gracefully instead
+        // of failing the whole endpoint when this table is unavailable.
+        console.error('tutors:get credentials query failed', error)
       }
 
       let availabilityByEmail = new Map()
@@ -134,7 +145,9 @@ export async function handler(event) {
           availabilityByEmail.get(key).push(String(row.slot_key || ''))
         }
       } catch (error) {
-        if (!isMissingTutorAvailabilityTable(error)) throw error
+        // Availability should not take the full tutor directory down.
+        // Fallback to profile.availability if DB query fails.
+        console.error('tutors:get availability query failed', error)
       }
 
       const tutors = rows.map((row) => {
@@ -144,7 +157,9 @@ export async function handler(event) {
         const availabilityFromDb = availabilityByEmail.get(email)
         const credentials =
           credentialsByTutor.get(String(row.id)) ??
-          (Array.isArray(profile.credentials) ? profile.credentials : [])
+          (Array.isArray(profile.credentials)
+            ? profile.credentials.map((item) => toCredentialSummary(item))
+            : [])
         return {
           id: String(row.id),
           name: String(row.display_name || 'Tutor'),

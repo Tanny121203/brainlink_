@@ -93,7 +93,10 @@ export function ProfileSection({ session, onUpdated }: Props) {
             ...tutorFields,
             credentials: [
               ...((tutorFields.credentials as TutorCredential[] | undefined) ?? []),
-              ...(result.profile.credentials ?? []),
+              ...((result.profile.credentials ?? []).map((cred) => ({
+                ...cred,
+                dataUrl: cred.dataUrl || '',
+              })) as TutorCredential[]),
             ],
           },
         })

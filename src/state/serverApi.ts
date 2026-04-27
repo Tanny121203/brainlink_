@@ -80,12 +80,19 @@ export type ServerTutor = {
     mimeType: string
     sizeBytes: number
     uploadedAtIso: string
-    dataUrl: string
+    dataUrl?: string
   }>
 }
 
 export async function fetchServerTutors() {
   return apiRequest<{ tutors: ServerTutor[] }>('tutors', { method: 'GET' })
+}
+
+export async function fetchServerTutorCredentialData(credentialId: string) {
+  return apiRequest<{ id: string; dataUrl: string; mimeType: string }>(
+    `tutor-credential?id=${encodeURIComponent(credentialId)}`,
+    { method: 'GET' }
+  )
 }
 
 export async function updateServerTutorProfile(payload: {

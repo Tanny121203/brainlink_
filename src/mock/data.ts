@@ -14,7 +14,16 @@ export type TutorProfile = {
   availability: string[]
   yearsExperience?: string
   shortBio?: string
-  credentials?: Array<{ id: string; title: string; fileName: string; url: string }>
+  credentials?: Array<{
+    id: string
+    title: string
+    fileName: string
+    url: string
+    mimeType?: string
+    sizeBytes?: number
+    uploadedAtIso?: string
+    dataUrl?: string
+  }>
 }
 
 export const tutorProfiles: TutorProfile[] = [

@@ -139,7 +139,11 @@ function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
       id: cred.id,
       title: cred.fileName,
       fileName: cred.fileName,
-      url: cred.dataUrl,
+      url: cred.dataUrl || '',
+      dataUrl: cred.dataUrl,
+      mimeType: cred.mimeType,
+      sizeBytes: cred.sizeBytes,
+      uploadedAtIso: cred.uploadedAtIso,
     })),
   }
 }
@@ -1006,10 +1010,10 @@ export function DashboardPage({ session }: { session: Session }) {
         tutor.credentials?.map((cred) => ({
           id: cred.id,
           fileName: cred.fileName,
-          mimeType: 'application/pdf',
-          sizeBytes: 0,
-          uploadedAtIso: new Date().toISOString(),
-          dataUrl: cred.url,
+          mimeType: cred.mimeType || 'application/pdf',
+          sizeBytes: cred.sizeBytes || 0,
+          uploadedAtIso: cred.uploadedAtIso || new Date().toISOString(),
+          dataUrl: cred.dataUrl || cred.url || '',
         })),
     })
   }
