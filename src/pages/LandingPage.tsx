@@ -1,5 +1,12 @@
-import { Icon } from '@iconify/react'
 import { Link, useNavigate } from 'react-router-dom'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import {
+  faUserGraduate,
+  faUsers,
+  faBookOpenReader,
+  faHandshake,
+  type IconDefinition,
+} from '@fortawesome/free-solid-svg-icons'
 import { RolePill } from '../components/RolePill'
 import type { Role } from '../state/session'
 import { setPreferredRole } from '../state/session'
@@ -7,47 +14,46 @@ import { Icons } from '../components/icons'
 import { useDocumentTitle } from '../components/Toast'
 import { BRAINLINK_LOGO_SRC } from '../branding'
 
-/** Fluent Emoji set — glossy 3D-style icons via Iconify */
-const HERO_3D_ICONS = [
-  { icon: 'fluent-emoji:graduation-cap', label: 'Students' },
-  { icon: 'fluent-emoji:people-hugging', label: 'Parents & families' },
-  { icon: 'fluent-emoji:man-teacher', label: 'Tutors' },
-  { icon: 'fluent-emoji:handshake', label: 'Trusted match' },
+const HERO_ICONS: { icon: IconDefinition; label: string }[] = [
+  { icon: faUserGraduate, label: 'Students' },
+  { icon: faUsers, label: 'Parents and Families' },
+  { icon: faBookOpenReader, label: 'Tutors' },
+  { icon: faHandshake, label: 'Trusted Match' },
 ] as const
 
 const WHAT_WE_DO_FEATURES = [
   {
-    icon: 'fluent-emoji:magnifying-glass-tilted-left',
+    icon: Icons.Search,
     title: 'Smarter tutor matching',
     body: 'Cut through noise with filters that match subject, level, and schedule—so families land tutors who actually fit, faster.',
     accent: 'student' as const,
   },
   {
-    icon: 'fluent-emoji:calendar',
+    icon: Icons.Calendar,
     title: 'Stress-free scheduling',
     body: 'Book and see upcoming sessions in one place. Fewer mix-ups, fewer “which time again?” moments for everyone.',
     accent: 'parent' as const,
   },
   {
-    icon: 'fluent-emoji:chart-increasing',
+    icon: Icons.Dashboard,
     title: 'Progress you can see',
     body: 'Follow growth over time with lightweight tracking—so students stay motivated and parents stay reassured.',
     accent: 'tutor' as const,
   },
   {
-    icon: 'fluent-emoji:speech-balloon',
+    icon: Icons.Message,
     title: 'Clear communication',
     body: 'Keep messages and updates alongside sessions—not lost in random group chats or inboxes.',
     accent: 'student' as const,
   },
   {
-    icon: 'fluent-emoji:busts-in-silhouette',
+    icon: Icons.Users,
     title: 'Built for each role',
     body: 'Students, parents, and tutors each get a view that matches how they work—without clutter they don’t need.',
     accent: 'parent' as const,
   },
   {
-    icon: 'fluent-emoji:locked-with-key',
+    icon: Icons.Shield,
     title: 'Organized and secure',
     body: 'A calmer, structured hub for your learning life—privacy-minded and easy to navigate.',
     accent: 'tutor' as const,
@@ -98,7 +104,10 @@ function RoleCard({ role }: { role: Role }) {
         }}
         aria-hidden="true"
       />
-      <div className="card-inner">
+      <div
+        className="card-inner"
+        style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      >
         <div className="card-header">
           <div>
             <RolePill role={role} />
@@ -114,7 +123,7 @@ function RoleCard({ role }: { role: Role }) {
           {meta.body}
         </p>
 
-        <div className="btn-row" style={{ marginTop: 14 }}>
+        <div className="btn-row" style={{ marginTop: 'auto', paddingTop: 14 }}>
           <button
             className={`btn ${meta.ctaClass}`}
             onClick={() => {
@@ -188,20 +197,18 @@ export function LandingPage() {
               <div className="landing-hero-icon-cluster" aria-hidden="true">
                 <div className="landing-hero-icon-cluster-bg" />
                 <div className="landing-3d-icons-grid">
-                  {HERO_3D_ICONS.map((item, i) => (
+                  {HERO_ICONS.map((item, i) => (
                     <div
-                      key={item.icon}
+                      key={item.label}
                       className={`landing-3d-icon-card landing-3d-icon-card--${i % 4}`}
                     >
-                      <Icon icon={item.icon} className="landing-3d-icon-svg" width={72} height={72} />
+                      <span className="landing-3d-icon-fa" aria-hidden="true">
+                        <FontAwesomeIcon icon={item.icon} className="landing-3d-icon-svg" />
+                      </span>
                       <span className="landing-3d-icon-label">{item.label}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="landing-3d-icons-hub" aria-hidden="true">
-                <Icon icon="fluent-emoji:link" width={36} height={36} />
-                <span>One connected hub for learning</span>
               </div>
             </div>
           </div>
@@ -209,22 +216,22 @@ export function LandingPage() {
           <div className="landing-trust-bar">
             <div className="landing-trust-item">
               <div className="landing-trust-stat">3</div>
-              <div className="landing-trust-label">roles in one platform</div>
+              <div className="landing-trust-label">Roles in one platform</div>
             </div>
             <div className="landing-trust-divider" aria-hidden="true" />
             <div className="landing-trust-item">
               <div className="landing-trust-stat">1:1</div>
-              <div className="landing-trust-label">focused tutoring sessions</div>
+              <div className="landing-trust-label">Focused tutoring sessions</div>
             </div>
             <div className="landing-trust-divider" aria-hidden="true" />
             <div className="landing-trust-item">
               <div className="landing-trust-stat">24/7</div>
-              <div className="landing-trust-label">access to your learning hub</div>
+              <div className="landing-trust-label">Access to your learning hub</div>
             </div>
             <div className="landing-trust-divider" aria-hidden="true" />
             <div className="landing-trust-item">
               <div className="landing-trust-stat">100%</div>
-              <div className="landing-trust-label">your work, one structured place</div>
+              <div className="landing-trust-label">All your learning, in one place</div>
             </div>
           </div>
         </div>
@@ -241,7 +248,7 @@ export function LandingPage() {
           <div className="card-inner">
             <header className="landing-what-header">
               <div className="label">What we do</div>
-              <h2 className="landing-what-heading">Learning that stays connected—end to end</h2>
+              <h2 className="landing-what-heading">Seamless learning, all in one place</h2>
               <p className="landing-what-lead">
                 BrainLink turns scattered tutoring logistics into one friendly workflow. Here’s what you
                 gain at a glance.
@@ -255,7 +262,7 @@ export function LandingPage() {
                   className={`landing-what-feature landing-what-feature--${f.accent}`}
                 >
                   <div className="landing-what-feature-icon-wrap" aria-hidden="true">
-                    <Icon icon={f.icon} width={44} height={44} className="landing-what-feature-icon" />
+                    {f.icon({ size: 36, className: 'landing-what-feature-icon' })}
                   </div>
                   <h3 className="landing-what-feature-title">{f.title}</h3>
                   <p className="landing-what-feature-desc">{f.body}</p>
@@ -263,9 +270,6 @@ export function LandingPage() {
               ))}
             </div>
 
-            <p className="landing-what-foot">
-              Pick your role below to get started—it only takes a minute.
-            </p>
           </div>
         </section>
       </div>

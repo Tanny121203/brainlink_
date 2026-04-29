@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Modal } from '../components/Modal'
-import { RolePill } from '../components/RolePill'
 import {
-  parentChild,
   parentSessions,
   parentTodos,
   parentTutors,
@@ -233,6 +231,7 @@ function StatusPill({
 function TutorCard({
   t,
   existingTutor,
+  existingTutorLabel = 'Your Tutor',
   onBook,
   onViewProfile,
   onMessage,
@@ -240,6 +239,7 @@ function TutorCard({
   t: TutorProfile
   /** When set, this tutor is already in the learner’s roster (student/parent). */
   existingTutor?: boolean
+  existingTutorLabel?: string
   onBook?: (tutor: TutorProfile) => void
   onViewProfile?: (tutor: TutorProfile) => void
   onMessage?: (tutor: TutorProfile) => void
@@ -248,7 +248,6 @@ function TutorCard({
     () => createAvailability(t.availability),
     [t.availability]
   )
-  const menuItems = tutorCardMenu(t, existingTutor, onBook, onViewProfile, onMessage)
 
   return (
     <div className="card">
@@ -260,7 +259,7 @@ function TutorCard({
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Pin({ size: 14 })} {t.city}
               </span>{' '}
-              • {t.mode} •{' '}
+              •{' '}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
               </span>
@@ -271,17 +270,16 @@ function TutorCard({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-end',
-              gap: 6,
+              gap: 8,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {existingTutor ? (
                 <span className="pill" title="Already in your tutors list">
-                  Your tutor
+                  {existingTutorLabel}
                 </span>
               ) : null}
               <div className="pill">₱{t.hourlyRate}/hr</div>
-              <OverflowMenu items={menuItems} />
             </div>
           </div>
         </div>
@@ -295,38 +293,24 @@ function TutorCard({
             title="When they’re open"
           />
         </div>
+
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="btn" onClick={() => onViewProfile?.(t)} type="button">
+            {Icons.CheckBook({ size: 14 })}
+            View profile
+          </button>
+          <button className="btn" onClick={() => onMessage?.(t)} type="button">
+            {Icons.Message({ size: 14 })}
+            Message
+          </button>
+          <button className="btn btn-primary" onClick={() => onBook?.(t)} type="button">
+            {Icons.Calendar({ size: 14 })}
+            {existingTutor ? 'Book session' : 'Request session'}
+          </button>
+        </div>
       </div>
     </div>
   )
-}
-
-function tutorCardMenu(
-  t: TutorProfile,
-  existingTutor: boolean | undefined,
-  onBook?: (tutor: TutorProfile) => void,
-  onViewProfile?: (tutor: TutorProfile) => void,
-  onMessage?: (tutor: TutorProfile) => void
-): OverflowMenuItem[] {
-  return [
-    {
-      key: 'profile',
-      label: 'View profile',
-      icon: Icons.CheckBook,
-      onSelect: () => onViewProfile?.(t),
-    },
-    {
-      key: 'message',
-      label: 'Message',
-      icon: Icons.Message,
-      onSelect: () => onMessage?.(t),
-    },
-    {
-      key: 'book',
-      label: existingTutor ? 'Book session' : 'Request session',
-      icon: Icons.Calendar,
-      onSelect: () => onBook?.(t),
-    },
-  ]
 }
 
 function SubjectChips({
@@ -440,8 +424,72 @@ function YourTutorsStudentList({
                     level={t.level}
                     subjects={t.subjects}
                     maxVisible={2}
-                    leadingChips={[t.mode]}
                   />
+                  <div style={{ marginTop: 10 }}>
+                    <AvailabilityGrid
+                      availability={createAvailability(t.availability)}
+                      compact
+                      title="When they’re open"
+                    />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function YourTutorsParentList({
+  tutorDirectory,
+  childName,
+  onBook,
+  onViewProfile,
+  onMessage,
+}: {
+  tutorDirectory: TutorProfile[]
+  childName: string
+  onBook?: (tutor: TutorProfile) => void
+  onViewProfile?: (tutor: TutorProfile) => void
+  onMessage?: (tutor: TutorProfile) => void
+}) {
+  return (
+    <section className="card">
+      <div className="card-inner">
+        <SectionTitle
+          title={`${childName}'s Tutor`}
+          subtitle="Tutors currently working with your child."
+        />
+        <div className="grid" style={{ gap: 10, marginTop: 12 }}>
+          {parentTutors.map((rel) => {
+            const t = tutorDirectory.find((x) => x.id === rel.tutorId)
+            if (!t) return null
+            return (
+              <div
+                key={rel.tutorId}
+                className="card"
+                style={{ background: 'var(--surface-soft)' }}
+              >
+                <div className="card-inner">
+                  <div className="card-header">
+                    <div>
+                      <h3 style={{ fontSize: 16 }}>{t.name}</h3>
+                      <p className="muted" style={{ marginTop: 6 }}>
+                        {rel.relationship} • Since {rel.since}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="pill">
+                        {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
+                      </span>
+                      <OverflowMenu
+                        items={tutorListCardMenu(t, onBook, onViewProfile, onMessage)}
+                      />
+                    </div>
+                  </div>
+                  <SubjectChips level={t.level} subjects={t.subjects} maxVisible={2} />
                   <div style={{ marginTop: 10 }}>
                     <AvailabilityGrid
                       availability={createAvailability(t.availability)}
@@ -467,13 +515,19 @@ function StudentTutorsBrowseHub({
   level,
   setLevel,
   filteredTutors,
-  tutorDirectory,
   existingTutorIds,
   onBook,
   onViewProfile,
   onMessage,
   loading,
   error,
+  tabAccent = 'student',
+  discoverLabel = 'Discover tutors',
+  myTutorsLabel = 'Your tutors',
+  discoverTitle = 'Browse tutors',
+  discoverSubtitle = 'Search by subject, place, or name. Tutors you already work with are shown under Your tutors.',
+  existingTutorLabel = 'Your Tutor',
+  renderMyTutors,
 }: {
   tutorView: 'discover' | 'my'
   setTutorView: (v: 'discover' | 'my') => void
@@ -482,13 +536,19 @@ function StudentTutorsBrowseHub({
   level: 'All' | TutorProfile['level']
   setLevel: (v: 'All' | TutorProfile['level']) => void
   filteredTutors: TutorProfile[]
-  tutorDirectory: TutorProfile[]
   existingTutorIds: Set<string>
   onBook?: (tutor: TutorProfile) => void
   onViewProfile?: (tutor: TutorProfile) => void
   onMessage?: (tutor: TutorProfile) => void
   loading?: boolean
   error?: string | null
+  tabAccent?: 'student' | 'parent'
+  discoverLabel?: string
+  myTutorsLabel?: string
+  discoverTitle?: string
+  discoverSubtitle?: string
+  existingTutorLabel?: string
+  renderMyTutors: () => ReactNode
 }) {
   const discoveryTutors = useMemo(
     () => filteredTutors.filter((t) => !existingTutorIds.has(t.id)),
@@ -512,44 +572,40 @@ function StudentTutorsBrowseHub({
               role="tab"
               aria-selected={tutorView === 'discover'}
               className={`tab-switch-btn ${tutorView === 'discover' ? 'is-active' : ''}`}
-              data-accent="student"
+              data-accent={tabAccent}
               onClick={() => setTutorView('discover')}
             >
               {Icons.Search({ size: 16 })}
-              Discover tutors
+              {discoverLabel}
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={tutorView === 'my'}
               className={`tab-switch-btn ${tutorView === 'my' ? 'is-active' : ''}`}
-              data-accent="student"
+              data-accent={tabAccent}
               onClick={() => setTutorView('my')}
             >
               {Icons.Users({ size: 16 })}
-              Your tutors
+              {myTutorsLabel}
             </button>
           </div>
         </div>
       </div>
 
       {tutorView === 'my' ? (
-        <YourTutorsStudentList
-          tutorDirectory={tutorDirectory}
-          onBook={onBook}
-          onViewProfile={onViewProfile}
-          onMessage={onMessage}
-        />
+        renderMyTutors()
       ) : (
         <BrowseTutorsDiscover
-          title="Browse tutors"
-          subtitle="Search by subject, place, or name. Tutors you already work with are shown under Your tutors."
+          title={discoverTitle}
+          subtitle={discoverSubtitle}
           query={query}
           setQuery={setQuery}
           level={level}
           setLevel={setLevel}
           filteredTutors={discoveryTutors}
           existingTutorIds={new Set()}
+          existingTutorLabel={existingTutorLabel}
           onBook={onBook}
           onViewProfile={onViewProfile}
           onMessage={onMessage}
@@ -575,6 +631,7 @@ function BrowseTutorsDiscover({
   onMessage,
   loading,
   error,
+  existingTutorLabel = 'Your Tutor',
 }: {
   title: string
   subtitle: string
@@ -590,6 +647,7 @@ function BrowseTutorsDiscover({
   onMessage?: (tutor: TutorProfile) => void
   loading?: boolean
   error?: string | null
+  existingTutorLabel?: string
 }) {
   return (
     <section className="grid" style={{ gap: 14 }}>
@@ -674,6 +732,7 @@ function BrowseTutorsDiscover({
             key={t.id}
             t={t}
             existingTutor={existingTutorIds.has(t.id)}
+            existingTutorLabel={existingTutorLabel}
             onBook={onBook}
             onViewProfile={onViewProfile}
             onMessage={onMessage}
@@ -748,6 +807,9 @@ export function DashboardPage({ session }: { session: Session }) {
   const [query, setQuery] = useState('')
   const [level, setLevel] = useState<'All' | TutorProfile['level']>('All')
   const [studentTutorView, setStudentTutorView] = useState<'discover' | 'my'>(
+    'discover'
+  )
+  const [parentTutorView, setParentTutorView] = useState<'discover' | 'my'>(
     'discover'
   )
   const [serverTutors, setServerTutors] = useState<ServerTutor[]>([])
@@ -838,6 +900,11 @@ export function DashboardPage({ session }: { session: Session }) {
       alive = false
     }
   }, [session.role, section])
+
+  useEffect(() => {
+    if (section === 'parent.find') setParentTutorView('discover')
+    if (section === 'parent.tutors') setParentTutorView('my')
+  }, [section])
 
   const tutorDirectory = useMemo<TutorProfile[]>(() => {
     const byId = new Map<string, TutorProfile>()
@@ -1214,7 +1281,6 @@ export function DashboardPage({ session }: { session: Session }) {
             { key: 'parent.sessions', label: 'Sessions', icon: Icons.Calendar },
             { key: 'parent.tutors', label: 'Tutors', icon: Icons.Users },
             { key: 'parent.todos', label: 'To‑dos', icon: Icons.CheckBook },
-            { key: 'parent.find', label: 'Find tutors', icon: Icons.Search },
             { key: 'parent.profile', label: 'My profile', icon: Icons.User },
           ]
         : [
@@ -1227,51 +1293,6 @@ export function DashboardPage({ session }: { session: Session }) {
 
   return (
     <main className="grid" style={{ gap: 16 }}>
-      <section className="card page-hero">
-        <div
-          className="page-hero-accent"
-          aria-hidden="true"
-          style={{
-            background: `linear-gradient(180deg, ${theme.strong}, ${theme.soft})`,
-          }}
-        />
-        <div className="page-hero-inner">
-          <div className="card-header" style={{ marginBottom: 0 }}>
-            <div>
-              <RolePill role={session.role} />
-              <h2 style={{ marginTop: 10 }}>
-                {isNotesRoute ? 'Notes' : isMessagesRoute ? 'Messages' : theme.headline}
-              </h2>
-              <p className="subtle" style={{ marginTop: 6, maxWidth: 760 }}>
-                {isNotesRoute
-                  ? session.role === 'student'
-                    ? 'Session summaries and next steps from your tutors.'
-                    : session.role === 'parent'
-                      ? 'See what was covered in each lesson and what to reinforce at home.'
-                      : 'Capture outcomes and homework after each session.'
-                  : isMessagesRoute
-                    ? session.role === 'student'
-                      ? 'Chats with tutors about your subjects and sessions.'
-                      : session.role === 'parent'
-                        ? 'Messages from tutors about your child’s learning.'
-                        : 'Conversations with students and parents.'
-                    : session.role === 'student' &&
-                        (studentProfile?.yearLevel || studentProfile?.learningGoal)
-                      ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
-                      : session.role === 'parent' &&
-                          (parentProfile?.childName || parentProfile?.childYearLevel)
-                        ? `${theme.blurb} • ${parentProfile?.childName ?? parentChild.name}${parentProfile?.childYearLevel ? ` • ${parentProfile.childYearLevel}` : ''}`
-                        : session.role === 'tutor' &&
-                            (tutorProfile?.subjects || tutorProfile?.yearsExperience)
-                          ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
-                          : theme.blurb}
-              </p>
-            </div>
-            <div className="pill">{session.displayName}</div>
-          </div>
-        </div>
-      </section>
-
       <section className="dash-layout">
         <aside className="sidebar">
           <div className="card">
@@ -1303,13 +1324,12 @@ export function DashboardPage({ session }: { session: Session }) {
               </div>
 
               <div className="btn-row" style={{ marginTop: 10 }}>
-                <span className="pill">{session.role}</span>
                 {session.role === 'student' && studentProfile?.yearLevel ? (
                   <span className="pill">{studentProfile.yearLevel}</span>
                 ) : session.role === 'parent' &&
                   (parentProfile?.childName || parentProfile?.childYearLevel) ? (
                   <span className="pill">
-                    {parentProfile?.childName ?? parentChild.name}
+                    {parentProfile?.childName ?? 'Your Child'}
                     {parentProfile?.childYearLevel
                       ? ` • ${parentProfile.childYearLevel}`
                       : ''}
@@ -1414,7 +1434,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                   >
                                     {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
-                                  • {s.durationMins} min • {s.mode}
+                                  • {s.durationMins} min
                                   {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
@@ -1474,13 +1494,20 @@ export function DashboardPage({ session }: { session: Session }) {
                 level={level}
                 setLevel={setLevel}
                 filteredTutors={filteredTutors}
-                tutorDirectory={tutorDirectory}
                 existingTutorIds={studentExistingTutorIds}
                 onBook={openBookingModal}
                 onViewProfile={openTutorProfile}
                 onMessage={openMessageForTutor}
                 loading={tutorsLoading}
                 error={tutorsError}
+                renderMyTutors={() => (
+                  <YourTutorsStudentList
+                    tutorDirectory={tutorDirectory}
+                    onBook={openBookingModal}
+                    onViewProfile={openTutorProfile}
+                    onMessage={openMessageForTutor}
+                  />
+                )}
               />
             ) : section === 'student.profile' ? (
               <ProfileSection session={session} />
@@ -1606,7 +1633,7 @@ export function DashboardPage({ session }: { session: Session }) {
                     subtitle="Your child’s upcoming and recent sessions."
                     right={
                       <span className="pill">
-                        {parentProfile?.childName ?? parentChild.name}
+                        {parentProfile?.childName ?? 'Your Child'}
                       </span>
                     }
                   />
@@ -1631,7 +1658,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                     {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
-                                  • {s.durationMins} min • {s.mode}
+                                  • {s.durationMins} min
                                   {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
@@ -1673,71 +1700,37 @@ export function DashboardPage({ session }: { session: Session }) {
                   </div>
                 </div>
               </section>
-            ) : section === 'parent.tutors' ? (
-              <section className="card">
-                <div className="card-inner">
-                  <SectionTitle
-                    title="Tutors"
-                    subtitle="Tutors working with your child."
-                    right={
-                      <button className="btn" onClick={() => setSection('parent.find')}>
-                        {Icons.Search({ size: 16 })}
-                        Find tutors
-                      </button>
-                    }
+            ) : section === 'parent.tutors' || section === 'parent.find' ? (
+              <StudentTutorsBrowseHub
+                tutorView={parentTutorView}
+                setTutorView={setParentTutorView}
+                query={query}
+                setQuery={setQuery}
+                level={level}
+                setLevel={setLevel}
+                filteredTutors={filteredTutors}
+                existingTutorIds={parentExistingTutorIds}
+                onBook={openBookingModal}
+                onViewProfile={openTutorProfile}
+                onMessage={openMessageForTutor}
+                loading={tutorsLoading}
+                error={tutorsError}
+                tabAccent="parent"
+                discoverLabel="Find tutors"
+                myTutorsLabel={`${parentProfile?.childName ?? 'Your Child'}'s Tutor`}
+                discoverTitle="Find a tutor"
+                discoverSubtitle="Search by subject, location, or tutor name. Tutors already working with your child are shown under Your tutors."
+                existingTutorLabel={`${parentProfile?.childName ?? 'Your Child'}'s Tutor`}
+                renderMyTutors={() => (
+                  <YourTutorsParentList
+                    tutorDirectory={tutorDirectory}
+                    childName={parentProfile?.childName ?? 'Your Child'}
+                    onBook={openBookingModal}
+                    onViewProfile={openTutorProfile}
+                    onMessage={openMessageForTutor}
                   />
-                  <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                    {parentTutors.map((rel) => {
-                      const t = tutorDirectory.find((x) => x.id === rel.tutorId)
-                      if (!t) return null
-                      return (
-                        <div
-                          key={rel.tutorId}
-                          className="card"
-                          style={{ background: 'var(--surface-soft)' }}
-                        >
-                          <div className="card-inner">
-                            <div className="card-header">
-                              <div>
-                                <h3 style={{ fontSize: 16 }}>{t.name}</h3>
-                                <p className="muted" style={{ marginTop: 6 }}>
-                                  {rel.relationship} • Since {rel.since}
-                                </p>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span className="pill">
-                                  {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
-                                </span>
-                                <OverflowMenu
-                                  items={tutorListCardMenu(
-                                    t,
-                                    openBookingModal,
-                                    openTutorProfile,
-                                    openMessageForTutor
-                                  )}
-                                />
-                              </div>
-                            </div>
-                            <SubjectChips
-                              level={t.level}
-                              subjects={t.subjects}
-                              maxVisible={2}
-                              leadingChips={[t.mode]}
-                            />
-                            <div style={{ marginTop: 10 }}>
-                              <AvailabilityGrid
-                                availability={createAvailability(t.availability)}
-                                compact
-                                title="When they’re open"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </section>
+                )}
+              />
             ) : section === 'parent.todos' ? (
               <section className="card">
                 <div className="card-inner">
@@ -1787,24 +1780,6 @@ export function DashboardPage({ session }: { session: Session }) {
               </section>
             ) : section === 'parent.profile' ? (
               <ProfileSection session={session} />
-            ) : section === 'parent.find' ? (
-              <BrowseTutorsDiscover
-                title="Find a tutor"
-                subtitle="Search by subject, location, or tutor name. Tutors already working with your child are shown under Tutors."
-                query={query}
-                setQuery={setQuery}
-                level={level}
-                setLevel={setLevel}
-                filteredTutors={filteredTutors.filter(
-                  (t) => !parentExistingTutorIds.has(t.id)
-                )}
-                existingTutorIds={new Set()}
-                onBook={openBookingModal}
-                onViewProfile={openTutorProfile}
-                onMessage={openMessageForTutor}
-                loading={tutorsLoading}
-                error={tutorsError}
-              />
             ) : (
               <section className="card">
                 <div className="card-inner">
@@ -1813,7 +1788,7 @@ export function DashboardPage({ session }: { session: Session }) {
                     subtitle="Sessions, tutors, and to‑dos at a glance."
                     right={
                       <span className="pill">
-                        {parentProfile?.childName ?? parentChild.name}
+                        {parentProfile?.childName ?? 'Your Child'}
                       </span>
                     }
                   />
@@ -2145,7 +2120,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                     {client ? ` • ${client.name}` : ''}
                                   </h3>
                                   <p className="muted" style={{ marginTop: 6 }}>
-                                    {s.when} • {s.durationMins} min • {s.mode}
+                                    {s.when} • {s.durationMins} min
                                   </p>
                                 </div>
                                 <StatusPill text={s.status} tone={s.status === 'Completed' ? 'good' : 'neutral'} />
@@ -2566,7 +2541,7 @@ export function DashboardPage({ session }: { session: Session }) {
         {bookingTutor ? (
           <div className="grid" style={{ gap: 12 }}>
             <p className="muted">
-              {bookingTutor.mode} • ₱{bookingTutor.hourlyRate}/hr •{' '}
+              ₱{bookingTutor.hourlyRate}/hr •{' '}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Star({ size: 14 })} {bookingTutor.rating.toFixed(1)}
               </span>
@@ -2643,7 +2618,7 @@ export function DashboardPage({ session }: { session: Session }) {
           <div className="grid" style={{ gap: 12 }}>
             <p className="muted">
               Current: {prettyWhen(rescheduleTarget.when)} •{' '}
-              {rescheduleTarget.durationMins} min • {rescheduleTarget.mode}
+              {rescheduleTarget.durationMins} min
             </p>
             <div className="field">
               <label className="label" htmlFor="reschedule-when">Propose a new time</label>
@@ -2668,7 +2643,10 @@ export function DashboardPage({ session }: { session: Session }) {
               />
             </div>
             <p className="subtle">
-              Your tutor can accept, decline, or counter-propose. The session
+              {session.role === 'parent'
+                ? `${parentProfile?.childName ?? 'Your Child'}'s tutor can accept, decline, or counter-propose.`
+                : 'Your tutor can accept, decline, or counter-propose.'}{' '}
+              The session
               will be marked <strong>Pending tutor approval</strong> until then.
             </p>
           </div>
@@ -2700,7 +2678,7 @@ export function DashboardPage({ session }: { session: Session }) {
             </p>
             <p className="muted">
               {prettyWhen(cancelTarget.when)} • {cancelTarget.durationMins} min •{' '}
-              {cancelTarget.mode}
+              Session
             </p>
             <p>This will notify the tutor. You can always book again later.</p>
           </div>
