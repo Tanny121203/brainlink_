@@ -20,7 +20,10 @@ export async function handler(event) {
               SELECT id, tutor_id, tutor_name, subject, when_iso, duration_mins, mode, status,
                      booked_by_email, booked_for_role, created_at, hidden_from_ui
               FROM learning_sessions
-              WHERE tutor_id = ${String(auth.sub)} AND hidden_from_ui = false
+              WHERE (
+                tutor_id = ${String(auth.sub)}
+                OR lower(tutor_id) = lower(${email})
+              ) AND hidden_from_ui = false
               ORDER BY created_at DESC
             `
           : await sql`
@@ -43,7 +46,7 @@ export async function handler(event) {
         )
         VALUES (
           ${sessionId},
-          ${String(body.tutorId || '')},
+          ${String(body.tutorId || body.tutorEmail || '')},
           ${String(body.tutorName || '')},
           ${String(body.subject || '')},
           ${String(body.when || '')},

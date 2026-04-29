@@ -15,6 +15,7 @@ import {
   deleteServerChild,
   fetchServerChildren,
   updateServerChild,
+  updateServerProfile,
   updateServerTutorProfile,
 } from '../state/serverApi'
 import { CredentialPreviewCard } from './CredentialPreviewCard'
@@ -164,15 +165,39 @@ export function ProfileSection({ session, onUpdated }: Props) {
       }
     }
 
-    const next = updateSession({
-      displayName: displayName.trim() || session.displayName,
-      email: email.trim() || session.email,
-      profile: nextProfile,
-    })
-
-    if (next) {
-      toast.success('Profile updated.')
-      onUpdated?.(next)
+    const nextDisplayName = displayName.trim() || session.displayName
+    const nextEmail = email.trim() || session.email
+    try {
+      const result = await updateServerProfile({
+        displayName: nextDisplayName,
+        email: nextEmail,
+        profile: nextProfile as Record<string, unknown>,
+      })
+      const next = updateSession({
+        displayName: result.session.displayName,
+        email: result.session.email,
+        profile: result.session.profile as Session['profile'],
+      })
+      if (next) {
+        toast.success('Profile updated.')
+        onUpdated?.(next)
+      }
+      return
+    } catch (error) {
+      const next = updateSession({
+        displayName: nextDisplayName,
+        email: nextEmail,
+        profile: nextProfile,
+      })
+      if (next) {
+        toast.error(
+          error instanceof Error
+            ? `${error.message} Saved locally only.`
+            : 'Could not sync profile to server. Saved locally only.'
+        )
+        onUpdated?.(next)
+      }
+      return
     }
   }
 

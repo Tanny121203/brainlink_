@@ -54,9 +54,34 @@ export async function fetchServerThread(requestId: string) {
   })
 }
 
+export async function fetchServerInboxThreads() {
+  return apiRequest<{ threads: Array<{ requestId: string; latestSentAt: string }> }>('inbox', {
+    method: 'GET',
+  })
+}
+
 export async function addServerThreadMessage(payload: Record<string, unknown>) {
   return apiRequest<{ id: string }>('inbox', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateServerProfile(payload: {
+  displayName: string
+  email: string
+  profile: Record<string, unknown>
+}) {
+  return apiRequest<{
+    ok: boolean
+    session: {
+      role: 'student' | 'parent' | 'tutor'
+      email: string
+      displayName: string
+      profile?: Record<string, unknown>
+    }
+  }>('profile', {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }

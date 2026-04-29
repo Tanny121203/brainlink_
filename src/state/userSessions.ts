@@ -44,12 +44,12 @@ export function saveUserSessions(sessions: UserSession[]) {
 }
 
 export function addUserSession(
-  session: Omit<UserSession, 'id' | 'createdAt'>
+  session: Omit<UserSession, 'id' | 'createdAt'> & { id?: string }
 ): UserSession {
   const all = loadUserSessions()
   const created: UserSession = {
     ...session,
-    id: 'us-' + Math.random().toString(36).slice(2, 10),
+    id: session.id || 'us-' + Math.random().toString(36).slice(2, 10),
     createdAt: Date.now(),
   }
   saveUserSessions([created, ...all])

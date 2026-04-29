@@ -13,7 +13,7 @@ import {
   type SharedThreadMessage,
   type SharedThreadOfferMessage,
 } from '../state/inbox'
-import { fetchServerSessionNotes, fetchServerThread } from '../state/serverApi'
+import { fetchServerInboxThreads, fetchServerSessionNotes, fetchServerThread } from '../state/serverApi'
 import type { Session } from '../state/session'
 
 function formatSentAt(iso: string) {
@@ -60,12 +60,29 @@ export function MessagesPanel({ session }: { session: Session }) {
   const tutorNameParam = params.get('tutor')
   const [tick, setTick] = useState(0)
   const [serverThreadMessages, setServerThreadMessages] = useState<SharedThreadMessage[]>([])
+  const [serverThreadIds, setServerThreadIds] = useState<string[]>([])
 
   useEffect(() => {
     const bump = () => setTick((t) => t + 1)
     window.addEventListener('brainlink-inbox-updated', bump)
     return () => window.removeEventListener('brainlink-inbox-updated', bump)
   }, [])
+
+  useEffect(() => {
+    let alive = true
+    fetchServerInboxThreads()
+      .then((result) => {
+        if (!alive) return
+        setServerThreadIds((result.threads ?? []).map((t) => t.requestId))
+      })
+      .catch(() => {
+        if (!alive) return
+        setServerThreadIds([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [tick])
 
   useEffect(() => {
     let alive = true
@@ -145,7 +162,7 @@ export function MessagesPanel({ session }: { session: Session }) {
   }, [requestId, tick])
 
   const threadIds = useMemo(() => {
-    const base = getSharedThreadIdsOrdered()
+    const base = Array.from(new Set([...getSharedThreadIdsOrdered(), ...serverThreadIds]))
     if (session.role !== 'student') return base
     const ids = new Set([...base, ...STUDENT_DEMO_THREAD_IDS])
     return [...ids].sort((a, b) => {
@@ -160,7 +177,7 @@ export function MessagesPanel({ session }: { session: Session }) {
       }
       return latest(b) - latest(a)
     })
-  }, [tick, session.role])
+  }, [tick, session.role, serverThreadIds])
 
   const timelineMessages = useMemo(() => {
     if (!requestId) return []

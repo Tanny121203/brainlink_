@@ -23,11 +23,16 @@ import {
 } from '../mock/data'
 import type { Session, TutorCredential } from '../state/session'
 import {
+  addServerThreadMessage,
   createServerSession,
+  createServerRescheduleRequest,
   fetchServerAvailability,
+  fetchServerRescheduleRequests,
   fetchServerSessions,
   fetchServerTutors,
   saveServerAvailability,
+  updateServerRescheduleRequest,
+  updateServerSession,
   type ServerTutor,
 } from '../state/serverApi'
 import { SectionTitle, Stat } from '../components/ui'
@@ -53,17 +58,12 @@ import {
 import {
   addUserSession,
   hideMockSession,
-  isUserBookedId,
   loadHiddenMockIds,
   loadUserSessions,
   updateUserSession,
   type UserSession,
 } from '../state/userSessions'
-import {
-  createRescheduleRequest,
-  updateRescheduleRequest,
-  type RescheduleRequest,
-} from '../state/rescheduleRequests'
+import { type RescheduleRequest } from '../state/rescheduleRequests'
 
 function prettyWhen(when: string): string {
   const isoLike = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)
@@ -120,6 +120,38 @@ type ServerSessionRow = {
   mode?: TutorProfile['mode']
   status: string
   booked_by_email: string
+}
+
+type ServerRescheduleRow = {
+  id: string
+  session_id: string
+  tutor_id: string
+  requester_email: string
+  requester_name: string
+  original_when: string
+  requested_when: string
+  note?: string
+  status: RescheduleRequest['status']
+  counter_when?: string
+  created_at?: string
+  updated_at?: string
+}
+
+function mapServerReschedule(r: ServerRescheduleRow): RescheduleRequest {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    tutorId: r.tutor_id,
+    requesterEmail: r.requester_email,
+    requesterName: r.requester_name,
+    originalWhen: r.original_when,
+    requestedWhen: r.requested_when,
+    note: r.note || undefined,
+    status: r.status,
+    counterWhen: r.counter_when || undefined,
+    createdAt: Date.parse(String(r.created_at || '')) || Date.now(),
+    updatedAt: Date.parse(String(r.updated_at || '')) || Date.now(),
+  }
 }
 
 function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
@@ -802,6 +834,9 @@ export function DashboardPage({ session }: { session: Session }) {
   const [counterWhen, setCounterWhen] = useState('')
   const [requestsVersion, setRequestsVersion] = useState(0)
   const bumpRequests = () => setRequestsVersion((v) => v + 1)
+  const [serverRescheduleRequests, setServerRescheduleRequests] = useState<RescheduleRequest[]>(
+    []
+  )
 
   // Tutor's editable availability (keyed to their session email)
   // We keep a "saved" snapshot and a "draft" the tutor edits. They only
@@ -861,6 +896,24 @@ export function DashboardPage({ session }: { session: Session }) {
       alive = false
     }
   }, [session.role, sessionsVersion])
+
+  useEffect(() => {
+    if (session.role !== 'student' && session.role !== 'parent' && session.role !== 'tutor') return
+    let alive = true
+    fetchServerRescheduleRequests()
+      .then((result) => {
+        if (!alive) return
+        const mapped = ((result.requests as ServerRescheduleRow[]) ?? []).map(mapServerReschedule)
+        setServerRescheduleRequests(mapped)
+      })
+      .catch(() => {
+        if (!alive) return
+        setServerRescheduleRequests([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [session.role, requestsVersion])
 
   const tutorDirectory = useMemo<TutorProfile[]>(() => {
     const byId = new Map<string, TutorProfile>()
@@ -977,21 +1030,11 @@ export function DashboardPage({ session }: { session: Session }) {
     return [...mine, ...mock]
   }, [sessionsVersion, session.email])
 
-  // Prototype note: tutor↔session ownership is loose in the mock data, so we
-  // surface every reschedule request for the tutor view (sorted latest-first).
+  // Server-backed list to keep tutor/learner state consistent across devices.
   const allPendingRequests = useMemo<RescheduleRequest[]>(() => {
-    void requestsVersion
     if (session.role !== 'tutor') return []
-    try {
-      const raw = localStorage.getItem('brainlink.rescheduleRequests.v1')
-      if (!raw) return []
-      const list = JSON.parse(raw) as RescheduleRequest[]
-      if (!Array.isArray(list)) return []
-      return [...list].sort((a, b) => b.updatedAt - a.updatedAt)
-    } catch {
-      return []
-    }
-  }, [requestsVersion, session.role])
+    return [...serverRescheduleRequests].sort((a, b) => b.updatedAt - a.updatedAt)
+  }, [serverRescheduleRequests, session.role])
 
   function openBookingModal(tutor: TutorProfile) {
     setBookingTutor(tutor)
@@ -1048,8 +1091,11 @@ export function DashboardPage({ session }: { session: Session }) {
     navigate(`/app/notes?${q.toString()}`)
   }
 
-  function startSessionAction(title: string) {
-    toast.info(`Starting session flow for "${title}" is ready for integration.`)
+  function startSessionAction(title: string, requestId?: string) {
+    const q = new URLSearchParams()
+    if (requestId) q.set('request', requestId)
+    q.set('session', title)
+    navigate(`/app/messages?${q.toString()}`)
   }
 
   function closeBookingModal() {
@@ -1067,8 +1113,9 @@ export function DashboardPage({ session }: { session: Session }) {
       return
     }
     const duration = Math.max(15, Number(bookingDuration) || 60)
+    let serverSessionId = ''
     try {
-      await createServerSession({
+      const created = await createServerSession({
         tutorId: bookingTutor.id,
         tutorName: bookingTutor.name,
         subject: bookingSubject,
@@ -1077,17 +1124,19 @@ export function DashboardPage({ session }: { session: Session }) {
         mode: bookingTutor.mode,
         status: 'Upcoming',
       })
+      serverSessionId = created.id
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not book session.')
       return
     }
     addUserSession({
+      id: serverSessionId || undefined,
       tutorId: bookingTutor.id,
       tutorName: bookingTutor.name,
       subject: bookingSubject,
       when: bookingWhen,
       durationMins: duration,
-      mode: bookingTutor.mode,
+      mode: bookingTutor.mode || 'Online',
       status: 'Upcoming',
       bookedByEmail: session.email,
       bookedForRole: session.role,
@@ -1109,7 +1158,7 @@ export function DashboardPage({ session }: { session: Session }) {
     setRescheduleTarget(null)
   }
 
-  function confirmReschedule() {
+  async function confirmReschedule() {
     if (!rescheduleTarget) return
     if (!rescheduleWhen) {
       toast.error('Please pick a new date and time.')
@@ -1127,16 +1176,38 @@ export function DashboardPage({ session }: { session: Session }) {
       updateUserSession(rescheduleTarget.id, {
         status: 'Pending tutor approval',
       })
+      await updateServerSession({
+        id: rescheduleTarget.id,
+        status: 'Pending tutor approval',
+      }).catch(() => {
+        // Keep local fallback status when API is temporarily unavailable.
+      })
     } else {
       // Hide the mock session and create a replacement user session marked pending
       hideMockSession(rescheduleTarget.id)
+      let createdServerId = ''
+      try {
+        const createdServer = await createServerSession({
+          tutorId: rescheduleTarget.tutorId,
+          tutorName,
+          subject: rescheduleTarget.title,
+          when: rescheduleTarget.when,
+          durationMins: rescheduleTarget.durationMins,
+          mode: rescheduleTarget.mode,
+          status: 'Pending tutor approval',
+        })
+        createdServerId = createdServer.id
+      } catch {
+        // Keep local fallback session if network is unavailable.
+      }
       const created = addUserSession({
+        id: createdServerId || undefined,
         tutorId: rescheduleTarget.tutorId,
         tutorName,
         subject: rescheduleTarget.title,
         when: rescheduleTarget.when,
         durationMins: rescheduleTarget.durationMins,
-        mode: rescheduleTarget.mode,
+        mode: rescheduleTarget.mode || 'Online',
         status: 'Pending tutor approval',
         bookedByEmail: session.email,
         bookedForRole: session.role,
@@ -1144,15 +1215,21 @@ export function DashboardPage({ session }: { session: Session }) {
       affectedSessionId = created.id
     }
 
-    createRescheduleRequest({
-      sessionId: affectedSessionId,
-      tutorId: rescheduleTarget.tutorId,
-      requesterEmail: session.email,
-      requesterName: session.displayName,
-      originalWhen: rescheduleTarget.when,
-      requestedWhen: rescheduleWhen,
-      note: rescheduleNote.trim() || undefined,
-    })
+    try {
+      await createServerRescheduleRequest({
+        sessionId: affectedSessionId,
+        tutorId: rescheduleTarget.tutorId,
+        requesterName: session.displayName,
+        originalWhen: rescheduleTarget.when,
+        requestedWhen: rescheduleWhen,
+        note: rescheduleNote.trim() || undefined,
+      })
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Could not send reschedule request.'
+      )
+      return
+    }
 
     toast.success(
       `Reschedule request sent to ${tutorName}. They’ll confirm or propose another time.`
@@ -1174,15 +1251,29 @@ export function DashboardPage({ session }: { session: Session }) {
     bumpSessions()
   }
 
-  function tutorDecision(
+  async function tutorDecision(
     req: RescheduleRequest,
     decision: 'Accepted' | 'Declined'
   ) {
-    updateRescheduleRequest(req.id, { status: decision })
-    if (decision === 'Accepted' && isUserBookedId(req.sessionId)) {
+    try {
+      await updateServerRescheduleRequest({ id: req.id, status: decision })
+    } catch {
+      toast.error('Could not update request.')
+      return
+    }
+    if (decision === 'Accepted') {
       updateUserSession(req.sessionId, {
         status: 'Upcoming',
         when: req.requestedWhen,
+      })
+    }
+    if (decision === 'Accepted') {
+      await updateServerSession({
+        id: req.sessionId,
+        status: 'Upcoming',
+        when: req.requestedWhen,
+      }).catch(() => {
+        // Session might be local-only legacy; keep UI state updated regardless.
       })
     }
     toast.success(
@@ -1194,16 +1285,22 @@ export function DashboardPage({ session }: { session: Session }) {
     bumpSessions()
   }
 
-  function submitCounter() {
+  async function submitCounter() {
     if (!counterRequestId) return
     if (!counterWhen) {
       toast.error('Please pick a counter time.')
       return
     }
-    updateRescheduleRequest(counterRequestId, {
-      status: 'Counter proposed',
-      counterWhen,
-    })
+    try {
+      await updateServerRescheduleRequest({
+        id: counterRequestId,
+        status: 'Counter proposed',
+        counterWhen,
+      })
+    } catch {
+      toast.error('Could not send counter-proposal.')
+      return
+    }
     toast.info('Counter-proposal sent to the learner.')
     setCounterRequestId(null)
     setCounterWhen('')
@@ -1466,7 +1563,7 @@ export function DashboardPage({ session }: { session: Session }) {
                               {s.status === 'Upcoming' ? (
                                 <button
                                   className="btn btn-primary btn-student"
-                                  onClick={() => startSessionAction(s.title)}
+                                  onClick={() => startSessionAction(s.title, s.id)}
                                 >
                                   {Icons.Send({ size: 16 })}
                                   Join
@@ -1527,7 +1624,7 @@ export function DashboardPage({ session }: { session: Session }) {
                           <div className="btn-row" style={{ marginTop: 10 }}>
                             <button
                               className="btn"
-                              onClick={() => toast.info(`Opened task: ${t.title}`)}
+                              onClick={() => navigate(`/app/notes?task=${encodeURIComponent(t.title)}`)}
                             >
                               {Icons.CheckBook({ size: 16 })}
                               Open
@@ -1781,14 +1878,16 @@ export function DashboardPage({ session }: { session: Session }) {
                           <div className="btn-row" style={{ marginTop: 10 }}>
                             <button
                               className="btn"
-                              onClick={() => toast.info(`Viewing task: ${t.title}`)}
+                              onClick={() => navigate(`/app/notes?task=${encodeURIComponent(t.title)}`)}
                             >
                               {Icons.CheckBook({ size: 16 })}
                               View
                             </button>
                             <button
                               className="btn"
-                              onClick={() => navigate('/app/messages')}
+                              onClick={() =>
+                                navigate('/app/messages')
+                              }
                             >
                               {Icons.Message({ size: 16 })}
                               Ask tutor
@@ -1984,7 +2083,7 @@ export function DashboardPage({ session }: { session: Session }) {
                             <button
                               className="btn"
                               onClick={() =>
-                                toast.info(`Offer details: ${o.subject} • ${o.toStudentName}`)
+                                navigate(`/app/messages?request=${encodeURIComponent(o.requestId)}`)
                               }
                             >
                               {Icons.CheckBook({ size: 16 })}
@@ -2181,14 +2280,16 @@ export function DashboardPage({ session }: { session: Session }) {
                               <div className="btn-row" style={{ marginTop: 10 }}>
                                 <button
                                   className="btn"
-                                  onClick={() => navigate('/app/messages')}
+                                  onClick={() =>
+                                    navigate(`/app/messages?request=${encodeURIComponent(s.id)}`)
+                                  }
                                 >
                                   {Icons.Message({ size: 16 })}
                                   Message
                                 </button>
                                 <button
                                   className="btn btn-primary btn-tutor"
-                                  onClick={() => startSessionAction(s.subject)}
+                                  onClick={() => startSessionAction(s.subject, s.id)}
                                 >
                                   {Icons.Send({ size: 16 })}
                                   Start
@@ -2386,22 +2487,38 @@ export function DashboardPage({ session }: { session: Session }) {
                 </button>
                 <button
                   className="btn btn-primary btn-tutor"
-                  onClick={() => {
+                  onClick={async () => {
                     if (session.role === 'tutor' && offerNeed) {
                       const rate =
                         Number(String(offerRate).replace(/[^\d.]/g, '')) || 0
-                      recordTutorSentOffer(
-                        session.email,
-                        {
+                      try {
+                        await addServerThreadMessage({
                           requestId: offerNeed.id,
-                          studentName: offerNeed.studentName,
-                          subject: offerNeed.subject,
-                          proposedRate: rate,
-                          availability: offerAvailability,
-                          message: offerMessage,
-                        },
-                        session.displayName
-                      )
+                          kind: 'offer',
+                          fromDisplayName: session.displayName,
+                          payload: {
+                            studentName: offerNeed.studentName,
+                            subject: offerNeed.subject,
+                            proposedRate: rate,
+                            availability: offerAvailability,
+                            message: offerMessage,
+                          },
+                        })
+                      } catch {
+                        // Backward-compatible fallback while server is unavailable.
+                        recordTutorSentOffer(
+                          session.email,
+                          {
+                            requestId: offerNeed.id,
+                            studentName: offerNeed.studentName,
+                            subject: offerNeed.subject,
+                            proposedRate: rate,
+                            availability: offerAvailability,
+                            message: offerMessage,
+                          },
+                          session.displayName
+                        )
+                      }
                     }
                     setOfferSentForNeedId(offerNeed.id)
                   }}
