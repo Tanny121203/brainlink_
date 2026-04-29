@@ -640,7 +640,7 @@ export function MessagesPanel({ session }: { session: Session }) {
                 title={!resolvedToEmail ? 'Recipient not available for this thread yet.' : undefined}
               >
                 {Icons.Send({ size: 16 })}
-                Send
+                Send message
               </button>
             </div>
           </div>

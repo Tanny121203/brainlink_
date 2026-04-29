@@ -2304,7 +2304,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                   aria-disabled="true"
                                 >
                                   {Icons.Send({ size: 16 })}
-                                  Start (mock)
+                                  Start
                                 </button>
                               </div>
                             </div>
