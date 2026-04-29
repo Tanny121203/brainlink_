@@ -634,7 +634,13 @@ export function MessagesPanel({ session }: { session: Session }) {
             <div className="btn-row">
               <button
                 type="button"
-                className="btn btn-primary"
+                className={`btn btn-primary ${
+                  session.role === 'tutor'
+                    ? 'btn-tutor'
+                    : session.role === 'parent'
+                      ? 'btn-parent'
+                      : 'btn-student'
+                }`}
                 onClick={sendChatMessage}
                 title={!resolvedToEmail ? 'Recipient not available for this thread yet.' : 'Send message'}
                 style={{ minWidth: 140, justifyContent: 'center' }}
