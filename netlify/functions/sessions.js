@@ -5,20 +5,31 @@ import { parseBody, requireAuth, id } from './_lib/request.js'
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return handleOptions()
   const auth = requireAuth(event)
-  if (!auth?.email || !auth?.role) return withCors(json(401, { error: 'Unauthorized' }))
+  if (!auth?.email || !auth?.role || !auth?.sub) {
+    return withCors(json(401, { error: 'Unauthorized' }))
+  }
 
   const sql = getSql()
   const email = String(auth.email)
 
   try {
     if (event.httpMethod === 'GET') {
-      const rows = await sql`
-        SELECT id, tutor_id, tutor_name, subject, when_iso, duration_mins, mode, status,
-               booked_by_email, booked_for_role, created_at, hidden_from_ui
-        FROM learning_sessions
-        WHERE booked_by_email = ${email} AND hidden_from_ui = false
-        ORDER BY created_at DESC
-      `
+      const rows =
+        auth.role === 'tutor'
+          ? await sql`
+              SELECT id, tutor_id, tutor_name, subject, when_iso, duration_mins, mode, status,
+                     booked_by_email, booked_for_role, created_at, hidden_from_ui
+              FROM learning_sessions
+              WHERE tutor_id = ${String(auth.sub)} AND hidden_from_ui = false
+              ORDER BY created_at DESC
+            `
+          : await sql`
+              SELECT id, tutor_id, tutor_name, subject, when_iso, duration_mins, mode, status,
+                     booked_by_email, booked_for_role, created_at, hidden_from_ui
+              FROM learning_sessions
+              WHERE booked_by_email = ${email} AND hidden_from_ui = false
+              ORDER BY created_at DESC
+            `
       return withCors(json(200, { sessions: rows }))
     }
 

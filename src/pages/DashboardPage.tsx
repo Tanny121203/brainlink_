@@ -23,7 +23,9 @@ import {
 } from '../mock/data'
 import type { Session, TutorCredential } from '../state/session'
 import {
+  createServerSession,
   fetchServerAvailability,
+  fetchServerSessions,
   fetchServerTutors,
   saveServerAvailability,
   type ServerTutor,
@@ -106,6 +108,18 @@ type TutorProfileViewData = {
   shortBio?: string
   photoDataUrl?: string
   credentials?: TutorCredential[]
+}
+
+type ServerSessionRow = {
+  id: string
+  tutor_id: string
+  tutor_name: string
+  subject: string
+  when_iso: string
+  duration_mins: number
+  mode?: TutorProfile['mode']
+  status: string
+  booked_by_email: string
 }
 
 function mapServerTutorToCatalogTutor(tutor: ServerTutor): TutorProfile {
@@ -757,6 +771,7 @@ export function DashboardPage({ session }: { session: Session }) {
   const [offerSentForNeedId, setOfferSentForNeedId] = useState<string | null>(
     null
   )
+  const [tutorServerSessions, setTutorServerSessions] = useState<ServerSessionRow[]>([])
   // Live session version tick — bumped whenever user sessions or hidden mock ids change
   const [sessionsVersion, setSessionsVersion] = useState(0)
   const bumpSessions = () => setSessionsVersion((v) => v + 1)
@@ -829,6 +844,23 @@ export function DashboardPage({ session }: { session: Session }) {
       alive = false
     }
   }, [session.role, section])
+
+  useEffect(() => {
+    if (session.role !== 'tutor') return
+    let alive = true
+    fetchServerSessions()
+      .then((result) => {
+        if (!alive) return
+        setTutorServerSessions((result.sessions as ServerSessionRow[]) ?? [])
+      })
+      .catch(() => {
+        if (!alive) return
+        setTutorServerSessions([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [session.role, sessionsVersion])
 
   const tutorDirectory = useMemo<TutorProfile[]>(() => {
     const byId = new Map<string, TutorProfile>()
@@ -1024,7 +1056,7 @@ export function DashboardPage({ session }: { session: Session }) {
     setBookingTutor(null)
   }
 
-  function confirmBooking() {
+  async function confirmBooking() {
     if (!bookingTutor) return
     if (!bookingWhen) {
       toast.error('Please pick a date and time.')
@@ -1035,6 +1067,20 @@ export function DashboardPage({ session }: { session: Session }) {
       return
     }
     const duration = Math.max(15, Number(bookingDuration) || 60)
+    try {
+      await createServerSession({
+        tutorId: bookingTutor.id,
+        tutorName: bookingTutor.name,
+        subject: bookingSubject,
+        when: bookingWhen,
+        durationMins: duration,
+        mode: bookingTutor.mode,
+        status: 'Upcoming',
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not book session.')
+      return
+    }
     addUserSession({
       tutorId: bookingTutor.id,
       tutorName: bookingTutor.name,
@@ -2095,10 +2141,23 @@ export function DashboardPage({ session }: { session: Session }) {
                     <SectionTitle
                       title="Sessions"
                       subtitle="Your upcoming schedule."
-                      right={<span className="pill">{tutorSessions.length} items</span>}
+                      right={
+                        <span className="pill">
+                          {tutorSessions.length + tutorServerSessions.length} items
+                        </span>
+                      }
                     />
                     <div className="grid" style={{ gap: 10, marginTop: 12 }}>
-                      {tutorSessions.map((s: TutorSession) => {
+                      {[...tutorSessions, ...tutorServerSessions.map((s) => ({
+                        id: s.id,
+                        withClientId: '',
+                        subject: s.subject,
+                        when: prettyWhen(s.when_iso),
+                        durationMins: Number(s.duration_mins || 60),
+                        mode: (s.mode as TutorProfile['mode']) || 'Online',
+                        status: s.status === 'Completed' ? 'Completed' as const : 'Upcoming' as const,
+                        bookedByEmail: s.booked_by_email,
+                      }))].map((s: TutorSession & { bookedByEmail?: string }) => {
                         const client = tutorClients.find((c) => c.id === s.withClientId)
                         return (
                           <div
@@ -2111,7 +2170,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                 <div>
                                   <h3 style={{ fontSize: 16 }}>
                                     {s.subject}
-                                    {client ? ` • ${client.name}` : ''}
+                                    {client ? ` • ${client.name}` : s.bookedByEmail ? ` • ${s.bookedByEmail}` : ''}
                                   </h3>
                                   <p className="muted" style={{ marginTop: 6 }}>
                                     {s.when} • {s.durationMins} min
