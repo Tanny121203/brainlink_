@@ -45,10 +45,18 @@ body {
 
 body {
   margin: 0;
+  font-family: var(--sans);
 }
 
 #root {
   min-height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 * {
@@ -1782,49 +1790,127 @@ main.grid {
   gap: 10px;
   padding: 16px 12px 14px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(44, 52, 54, 0.1);
-  /* Tight shadow so adjacent cards don’t share one big blur pool */
+  border: 1px solid rgba(44, 52, 54, 0.09);
+  /* Layered, softer shadow for a gentle floating feel */
   box-shadow:
-    0 1px 2px rgba(17, 24, 39, 0.05),
-    0 4px 14px rgba(17, 24, 39, 0.06);
-  transition: transform 160ms ease, box-shadow 160ms ease;
-}
-
-.landing-3d-icon-card:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow:
-    0 2px 6px rgba(17, 24, 39, 0.07),
-    0 8px 20px rgba(17, 24, 39, 0.08);
+    0 1px 1px rgba(17, 24, 39, 0.04),
+    0 8px 20px rgba(17, 24, 39, 0.07),
+    0 18px 38px rgba(17, 24, 39, 0.05);
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms ease;
 }
 
 .landing-3d-icon-card--0 {
-  transform: rotate(-2deg);
+  background:
+    radial-gradient(120% 100% at 15% 10%, rgba(170, 198, 255, 0.36), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg, rgba(196, 216, 255, 0.38), rgba(255, 255, 255, 0.98));
 }
 
 .landing-3d-icon-card--1 {
-  transform: rotate(2deg);
+  background:
+    radial-gradient(120% 100% at 15% 10%, rgba(198, 236, 204, 0.36), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg, rgba(217, 245, 221, 0.38), rgba(255, 255, 255, 0.98));
 }
 
 .landing-3d-icon-card--2 {
-  transform: rotate(1.5deg);
+  background:
+    radial-gradient(120% 100% at 15% 10%, rgba(223, 206, 255, 0.4), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg, rgba(233, 223, 252, 0.42), rgba(255, 255, 255, 0.98));
 }
 
 .landing-3d-icon-card--3 {
-  transform: rotate(-1.5deg);
+  background:
+    radial-gradient(120% 100% at 15% 10%, rgba(248, 220, 168, 0.42), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg, rgba(250, 232, 199, 0.44), rgba(255, 255, 255, 0.98));
+}
+
+.landing-3d-icon-card:hover {
+  transform: translateY(-4px) scale(1.03);
+  border-color: rgba(44, 52, 54, 0.14);
+  box-shadow:
+    0 2px 4px rgba(17, 24, 39, 0.06),
+    0 12px 26px rgba(17, 24, 39, 0.1),
+    0 24px 46px rgba(17, 24, 39, 0.08);
+}
+
+.landing-3d-icon-card--0 {
+  transform: rotate(-1.6deg) translateY(-1px);
+}
+
+.landing-3d-icon-card--1 {
+  transform: rotate(1.5deg) translateY(0.5px);
+}
+
+.landing-3d-icon-card--2 {
+  transform: rotate(1.2deg) translateY(1px);
+}
+
+.landing-3d-icon-card--3 {
+  transform: rotate(-1.3deg) translateY(0.5px);
 }
 
 .landing-3d-icon-card--0:hover,
 .landing-3d-icon-card--1:hover,
 .landing-3d-icon-card--2:hover,
 .landing-3d-icon-card--3:hover {
-  transform: translateY(-3px) scale(1.02) rotate(0deg);
+  transform: translateY(-4px) scale(1.03) rotate(0deg);
 }
 
 .landing-3d-icon-svg {
   display: block;
   /* Light edge only — card already provides depth */
   filter: drop-shadow(0 1px 2px rgba(17, 24, 39, 0.08));
+}
+
+.landing-3d-icon-fa {
+  width: 86px;
+  height: 86px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-3d-icon-fa .landing-3d-icon-svg {
+  width: 62px;
+  height: 62px;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8))
+    drop-shadow(0 7px 12px rgba(17, 24, 39, 0.18))
+    drop-shadow(0 14px 22px rgba(17, 24, 39, 0.1));
+}
+
+.landing-3d-icon-card:hover .landing-3d-icon-fa {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.landing-3d-icon-card:hover .landing-3d-icon-svg {
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.88))
+    drop-shadow(0 10px 16px rgba(17, 24, 39, 0.22))
+    drop-shadow(0 18px 28px rgba(17, 24, 39, 0.14));
+}
+
+.landing-3d-icon-card--0 .landing-3d-icon-svg {
+  color: var(--student-strong);
+}
+
+.landing-3d-icon-card--1 .landing-3d-icon-svg {
+  color: var(--parent-strong);
+}
+
+.landing-3d-icon-card--2 .landing-3d-icon-svg {
+  color: var(--tutor-strong);
+}
+
+.landing-3d-icon-card--3 .landing-3d-icon-svg {
+  color: #9b6a17;
 }
 
 .landing-3d-icon-label {
@@ -1988,23 +2074,38 @@ main.grid {
 
 .landing-what-feature--student {
   border-top: 3px solid var(--student-strong);
+  --feature-accent: var(--student-strong);
+  --feature-soft: rgba(175, 202, 254, 0.38);
 }
 
 .landing-what-feature--parent {
   border-top: 3px solid var(--parent-strong);
+  --feature-accent: var(--parent-strong);
+  --feature-soft: rgba(212, 244, 216, 0.42);
 }
 
 .landing-what-feature--tutor {
   border-top: 3px solid var(--tutor-strong);
+  --feature-accent: var(--tutor-strong);
+  --feature-soft: rgba(233, 223, 252, 0.44);
 }
 
 .landing-what-feature-icon-wrap {
   margin-bottom: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, var(--feature-soft), rgba(255, 255, 255, 0.9));
+  border: 1px solid rgba(44, 52, 54, 0.12);
 }
 
 .landing-what-feature-icon {
   display: block;
   filter: drop-shadow(0 2px 5px rgba(17, 24, 39, 0.1));
+  color: var(--feature-accent);
 }
 
 .landing-what-feature-title {

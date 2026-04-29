@@ -27,9 +27,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link to="/" className="brand-logo-wrap">
                 <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" className="brand-logo-img" />
               </Link>
-              <div>
-                <div className="muted brand-tagline">Students · Parents · Tutors</div>
-              </div>
             </div>
 
             <div className="btn-row">
