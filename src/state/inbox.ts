@@ -25,6 +25,7 @@ export type SharedThreadOfferMessage = {
   proposedRate: number
   availability: string
   message: string
+  toEmail?: string
 }
 
 /**
@@ -44,7 +45,22 @@ export type SharedTutorNoteMessage = {
   text: string
 }
 
-export type SharedThreadMessage = SharedThreadOfferMessage | SharedTutorNoteMessage
+export type SharedThreadChatMessage = {
+  id: string
+  requestId: string
+  sentAtIso: string
+  kind: 'chat'
+  fromRole: 'tutor' | 'student' | 'parent'
+  fromDisplayName: string
+  fromEmail: string
+  text: string
+  toEmail: string
+}
+
+export type SharedThreadMessage =
+  | SharedThreadOfferMessage
+  | SharedTutorNoteMessage
+  | SharedThreadChatMessage
 
 type InboxStore = {
   tutorSentOffers: Record<string, TutorSentOfferMessage[]>

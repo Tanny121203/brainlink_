@@ -797,6 +797,7 @@ export function DashboardPage({ session }: { session: Session }) {
   const [offerNeedId, setOfferNeedId] = useState<string | null>(null)
   const [offerRate, setOfferRate] = useState('450')
   const [offerAvailability, setOfferAvailability] = useState('Tue/Thu 6–8pm')
+  const [offerRecipientEmail, setOfferRecipientEmail] = useState('')
   const [offerMessage, setOfferMessage] = useState(
     'Hi! I can help with your goal. I’ll start with a quick diagnostic, then a focused plan per session.'
   )
@@ -1081,6 +1082,8 @@ export function DashboardPage({ session }: { session: Session }) {
     q.set('request', `tutor-${tutor.id}`)
     q.set('tutorId', tutor.id)
     q.set('tutor', tutor.name)
+    const knownEmail = serverTutors.find((t) => t.id === tutor.id)?.email
+    if (knownEmail) q.set('toEmail', knownEmail)
     navigate(`/app/messages?${q.toString()}`)
   }
 
@@ -1091,11 +1094,15 @@ export function DashboardPage({ session }: { session: Session }) {
     navigate(`/app/notes?${q.toString()}`)
   }
 
-  function startSessionAction(title: string, requestId?: string) {
+  function joinSessionAction(title: string, requestId?: string) {
     const q = new URLSearchParams()
     if (requestId) q.set('request', requestId)
     q.set('session', title)
     navigate(`/app/messages?${q.toString()}`)
+  }
+
+  function startSessionAction() {
+    // Intentional mock action per product direction.
   }
 
   function closeBookingModal() {
@@ -1563,7 +1570,7 @@ export function DashboardPage({ session }: { session: Session }) {
                               {s.status === 'Upcoming' ? (
                                 <button
                                   className="btn btn-primary btn-student"
-                                  onClick={() => startSessionAction(s.title, s.id)}
+                                  onClick={() => joinSessionAction(s.title, s.id)}
                                 >
                                   {Icons.Send({ size: 16 })}
                                   Join
@@ -2028,6 +2035,7 @@ export function DashboardPage({ session }: { session: Session }) {
                             onClick={() => {
                               setOfferNeedId(s.id)
                               setOfferSentForNeedId(null)
+                              setOfferRecipientEmail('')
                             }}
                           >
                             {Icons.Send({ size: 16 })}
@@ -2280,19 +2288,23 @@ export function DashboardPage({ session }: { session: Session }) {
                               <div className="btn-row" style={{ marginTop: 10 }}>
                                 <button
                                   className="btn"
-                                  onClick={() =>
-                                    navigate(`/app/messages?request=${encodeURIComponent(s.id)}`)
-                                  }
+                                  onClick={() => {
+                                    const q = new URLSearchParams()
+                                    q.set('request', s.id)
+                                    if (s.bookedByEmail) q.set('toEmail', s.bookedByEmail)
+                                    navigate(`/app/messages?${q.toString()}`)
+                                  }}
                                 >
                                   {Icons.Message({ size: 16 })}
                                   Message
                                 </button>
                                 <button
                                   className="btn btn-primary btn-tutor"
-                                  onClick={() => startSessionAction(s.subject, s.id)}
+                                  onClick={startSessionAction}
+                                  aria-disabled="true"
                                 >
                                   {Icons.Send({ size: 16 })}
-                                  Start
+                                  Start (mock)
                                 </button>
                               </div>
                             </div>
@@ -2397,6 +2409,7 @@ export function DashboardPage({ session }: { session: Session }) {
                   setDetailsNeedId(null)
                   setOfferNeedId(detailsNeed.id)
                   setOfferSentForNeedId(null)
+                  setOfferRecipientEmail('')
                 }}
               >
                 {Icons.Send({ size: 16 })}
@@ -2471,6 +2484,9 @@ export function DashboardPage({ session }: { session: Session }) {
                     const q = new URLSearchParams()
                     q.set('request', offerNeed.id)
                     q.set('student', offerNeed.studentName)
+                    if (offerRecipientEmail.trim()) {
+                      q.set('toEmail', offerRecipientEmail.trim().toLowerCase())
+                    }
                     navigate(`/app/messages?${q.toString()}`)
                     setOfferNeedId(null)
                     setOfferSentForNeedId(null)
@@ -2489,6 +2505,10 @@ export function DashboardPage({ session }: { session: Session }) {
                   className="btn btn-primary btn-tutor"
                   onClick={async () => {
                     if (session.role === 'tutor' && offerNeed) {
+                      if (!offerRecipientEmail.trim()) {
+                        toast.error('Recipient email is required to send this offer.')
+                        return
+                      }
                       const rate =
                         Number(String(offerRate).replace(/[^\d.]/g, '')) || 0
                       try {
@@ -2502,6 +2522,7 @@ export function DashboardPage({ session }: { session: Session }) {
                             proposedRate: rate,
                             availability: offerAvailability,
                             message: offerMessage,
+                            toEmail: offerRecipientEmail.trim().toLowerCase(),
                           },
                         })
                       } catch {
@@ -2551,6 +2572,15 @@ export function DashboardPage({ session }: { session: Session }) {
             ) : (
               <>
                 <div className="grid grid-2">
+                  <div className="field">
+                    <div className="label">Recipient email</div>
+                    <input
+                      className="input"
+                      value={offerRecipientEmail}
+                      onChange={(e) => setOfferRecipientEmail(e.target.value)}
+                      placeholder="learner@example.com"
+                    />
+                  </div>
                   <div className="field">
                     <div className="label">Your rate (PHP / hour)</div>
                     <input

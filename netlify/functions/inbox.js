@@ -6,7 +6,6 @@ async function hasThreadAccess(sql, requestId, auth) {
   const email = String(auth.email || '').toLowerCase()
   const sub = String(auth.sub || '')
   if (!email || !requestId) return false
-  if (requestId.startsWith('s-') && auth.role !== 'tutor') return true
   const linkedSession = await sql`
     SELECT id
     FROM learning_sessions
@@ -48,6 +47,16 @@ export async function handler(event) {
           FROM shared_messages
           WHERE lower(from_email) = lower(${email})
              OR lower(COALESCE(payload->>'toEmail', '')) = lower(${email})
+             OR EXISTS (
+               SELECT 1
+               FROM learning_sessions ls
+               WHERE ls.id = shared_messages.request_id
+                 AND (
+                   ls.booked_by_email = ${email}
+                   OR ls.tutor_id = ${String(auth.sub)}
+                   OR lower(ls.tutor_id) = lower(${email})
+                 )
+             )
           GROUP BY request_id
           ORDER BY latest_sent_at DESC
         `
@@ -79,10 +88,17 @@ export async function handler(event) {
       const messageId = id('msg')
       const requestId = String(body.requestId || '')
       const kind = String(body.kind || 'offer')
-      const payload = body.payload ?? {}
+      const payload = body.payload && typeof body.payload === 'object' ? body.payload : {}
+      const toEmail =
+        payload.toEmail && typeof payload.toEmail === 'string'
+          ? payload.toEmail.trim().toLowerCase()
+          : ''
       if (!requestId) return withCors(json(400, { error: 'Missing requestId' }))
-      if (kind !== 'offer' && kind !== 'tutor_note') {
+      if (kind !== 'offer' && kind !== 'tutor_note' && kind !== 'chat') {
         return withCors(json(400, { error: 'Invalid message kind' }))
+      }
+      if (kind === 'chat' && !toEmail) {
+        return withCors(json(400, { error: 'Missing recipient email' }))
       }
       const allowed = await hasThreadAccess(sql, requestId, auth)
       const isTutorOfferBootstrap =
@@ -90,6 +106,8 @@ export async function handler(event) {
       if (!allowed && !isTutorOfferBootstrap) {
         return withCors(json(403, { error: 'Forbidden' }))
       }
+      const normalizedPayload = { ...payload }
+      if (toEmail) normalizedPayload.toEmail = toEmail
       await sql`
         INSERT INTO shared_messages (
           id, request_id, kind, from_role, from_display_name, from_email, payload
@@ -101,7 +119,7 @@ export async function handler(event) {
           ${String(auth.role)},
           ${String(body.fromDisplayName || 'User')},
           ${String(auth.email)},
-          ${payload}
+          ${normalizedPayload}
         )
       `
       return withCors(json(201, { id: messageId }))

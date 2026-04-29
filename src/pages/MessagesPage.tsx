@@ -13,8 +13,14 @@ import {
   type SharedThreadMessage,
   type SharedThreadOfferMessage,
 } from '../state/inbox'
-import { fetchServerInboxThreads, fetchServerSessionNotes, fetchServerThread } from '../state/serverApi'
+import {
+  addServerChatMessage,
+  fetchServerInboxThreads,
+  fetchServerSessionNotes,
+  fetchServerThread,
+} from '../state/serverApi'
 import type { Session } from '../state/session'
+import { toast } from '../components/Toast'
 
 function formatSentAt(iso: string) {
   try {
@@ -50,7 +56,13 @@ function tutorNoteLabel(session: Session, m: Extract<SharedThreadMessage, { kind
 
 function previewLine(m: SharedThreadMessage) {
   if (m.kind === 'offer') return m.message
+  if (m.kind === 'chat') return m.text
   return m.text
+}
+
+function messageSubject(m: SharedThreadMessage): string {
+  if (m.kind === 'offer' || m.kind === 'tutor_note') return m.subject
+  return ''
 }
 
 export function MessagesPanel({ session }: { session: Session }) {
@@ -61,6 +73,8 @@ export function MessagesPanel({ session }: { session: Session }) {
   const [tick, setTick] = useState(0)
   const [serverThreadMessages, setServerThreadMessages] = useState<SharedThreadMessage[]>([])
   const [serverThreadIds, setServerThreadIds] = useState<string[]>([])
+  const [draftMessage, setDraftMessage] = useState('')
+  const explicitToEmail = params.get('toEmail')?.trim().toLowerCase() || ''
 
   useEffect(() => {
     const bump = () => setTick((t) => t + 1)
@@ -114,6 +128,10 @@ export function MessagesPanel({ session }: { session: Session }) {
                 proposedRate: Number(payload.proposedRate || payload.proposed_rate || 0),
                 availability: String(payload.availability || ''),
                 message: String(payload.message || ''),
+                toEmail:
+                  typeof payload.toEmail === 'string'
+                    ? payload.toEmail.trim().toLowerCase()
+                    : undefined,
               }
             }
             if (kind === 'tutor_note') {
@@ -128,6 +146,22 @@ export function MessagesPanel({ session }: { session: Session }) {
                 subject: String(payload.subject || ''),
                 headline: String(payload.headline || 'Session note'),
                 text: String(payload.text || ''),
+              }
+            }
+            if (kind === 'chat') {
+              return {
+                id: String((raw as { id?: string }).id || ''),
+                requestId: String((raw as { request_id?: string }).request_id || requestId),
+                sentAtIso: String((raw as { sent_at?: string }).sent_at || new Date().toISOString()),
+                kind: 'chat',
+                fromRole: String((raw as { from_role?: string }).from_role || 'student') as
+                  | 'tutor'
+                  | 'student'
+                  | 'parent',
+                fromDisplayName: String((raw as { from_display_name?: string }).from_display_name || 'User'),
+                fromEmail: String((raw as { from_email?: string }).from_email || ''),
+                text: String(payload.text || ''),
+                toEmail: String(payload.toEmail || '').trim().toLowerCase(),
               }
             }
             return null
@@ -188,6 +222,47 @@ export function MessagesPanel({ session }: { session: Session }) {
     }
     return combined.sort((a, b) => a.sentAtIso.localeCompare(b.sentAtIso))
   }, [requestId, session.role, tick, serverThreadMessages])
+
+  const resolvedToEmail = useMemo(() => {
+    if (explicitToEmail) return explicitToEmail
+    const reversed = [...timelineMessages].reverse()
+    for (const m of reversed) {
+      if (m.kind === 'chat') {
+        if (m.fromEmail !== session.email) return m.fromEmail.trim().toLowerCase()
+        if (m.toEmail) return m.toEmail.trim().toLowerCase()
+      }
+      if (m.kind === 'offer') {
+        if (m.fromEmail !== session.email) return m.fromEmail.trim().toLowerCase()
+        if (m.toEmail) return m.toEmail.trim().toLowerCase()
+      }
+    }
+    return ''
+  }, [explicitToEmail, timelineMessages, session.email])
+
+  async function sendChatMessage() {
+    if (!requestId) return
+    const text = draftMessage.trim()
+    if (!text) {
+      toast.error('Type a message first.')
+      return
+    }
+    if (!resolvedToEmail) {
+      toast.error('Recipient not found for this thread.')
+      return
+    }
+    try {
+      await addServerChatMessage({
+        requestId,
+        fromDisplayName: session.displayName,
+        text,
+        toEmail: resolvedToEmail,
+      })
+      setDraftMessage('')
+      setTick((t) => t + 1)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not send message.')
+    }
+  }
 
   const needFromMock = requestId
     ? studentNeeds.find((s) => s.id === requestId)
@@ -274,7 +349,9 @@ export function MessagesPanel({ session }: { session: Session }) {
                   'Thread'
                 const sub = need
                   ? `${need.subject} • ${need.goal}`
-                  : last?.subject ?? ''
+                  : last
+                    ? messageSubject(last)
+                    : ''
                 return (
                   <button
                     key={rid}
@@ -368,7 +445,7 @@ export function MessagesPanel({ session }: { session: Session }) {
                 : tutorNameParam
                   ? `Conversation with tutor ${tutorNameParam}`
                 : timelineMessages[0]
-                  ? `${timelineMessages[0].subject}`
+                  ? `${messageSubject(timelineMessages[0])}`
                   : ''
             }
             right={
@@ -425,6 +502,47 @@ export function MessagesPanel({ session }: { session: Session }) {
                             className="subtle"
                             style={{
                               marginTop: 10,
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            {m.text}
+                          </p>
+                          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+                            {formatSentAt(m.sentAtIso)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                if (m.kind === 'chat') {
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: mine ? 'flex-end' : 'flex-start',
+                      }}
+                    >
+                      <div
+                        className="card"
+                        style={{
+                          maxWidth: 'min(100%, 420px)',
+                          background: mine
+                            ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(230,245,255,0.85))'
+                            : 'rgba(255,255,255,0.72)',
+                          border: '1px solid rgba(0,0,0,0.06)',
+                        }}
+                      >
+                        <div className="card-inner" style={{ padding: '12px 14px' }}>
+                          <div className="label" style={{ marginBottom: 6 }}>
+                            {mine ? 'You' : m.fromDisplayName}
+                          </div>
+                          <p
+                            className="subtle"
+                            style={{
+                              marginTop: 6,
                               whiteSpace: 'pre-wrap',
                               lineHeight: 1.45,
                             }}
@@ -497,6 +615,34 @@ export function MessagesPanel({ session }: { session: Session }) {
                 )}
               </p>
             )}
+          </div>
+          <div className="divider" style={{ margin: '14px 0' }} />
+          <div className="grid" style={{ gap: 8 }}>
+            <div className="label">Type a message</div>
+            <textarea
+              className="input"
+              rows={3}
+              value={draftMessage}
+              onChange={(e) => setDraftMessage(e.target.value)}
+              placeholder={
+                resolvedToEmail
+                  ? `Message to ${resolvedToEmail}`
+                  : 'Recipient will appear once this thread has participant context.'
+              }
+              style={{ resize: 'vertical' }}
+            />
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={sendChatMessage}
+                disabled={!resolvedToEmail || !draftMessage.trim()}
+                title={!resolvedToEmail ? 'Recipient not available for this thread yet.' : undefined}
+              >
+                {Icons.Send({ size: 16 })}
+                Send
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -67,6 +67,23 @@ export async function addServerThreadMessage(payload: Record<string, unknown>) {
   })
 }
 
+export async function addServerChatMessage(payload: {
+  requestId: string
+  fromDisplayName: string
+  text: string
+  toEmail: string
+}) {
+  return addServerThreadMessage({
+    requestId: payload.requestId,
+    kind: 'chat',
+    fromDisplayName: payload.fromDisplayName,
+    payload: {
+      text: payload.text,
+      toEmail: payload.toEmail,
+    },
+  })
+}
+
 export async function updateServerProfile(payload: {
   displayName: string
   email: string
