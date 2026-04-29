@@ -636,8 +636,8 @@ export function MessagesPanel({ session }: { session: Session }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={sendChatMessage}
-                disabled={!resolvedToEmail || !draftMessage.trim()}
-                title={!resolvedToEmail ? 'Recipient not available for this thread yet.' : undefined}
+                title={!resolvedToEmail ? 'Recipient not available for this thread yet.' : 'Send message'}
+                style={{ minWidth: 140, justifyContent: 'center' }}
               >
                 {Icons.Send({ size: 16 })}
                 Send message

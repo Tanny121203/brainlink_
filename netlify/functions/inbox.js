@@ -31,6 +31,50 @@ async function hasThreadAccess(sql, requestId, auth) {
   return participant.length > 0
 }
 
+async function resolveRecipientEmail(sql, requestId, auth) {
+  const email = String(auth.email || '').toLowerCase()
+  if (!email || !requestId) return ''
+
+  const fromMessage = await sql`
+    SELECT from_email
+    FROM shared_messages
+    WHERE request_id = ${requestId}
+      AND lower(from_email) <> lower(${email})
+    ORDER BY sent_at DESC
+    LIMIT 1
+  `
+  if (fromMessage.length > 0) {
+    return String(fromMessage[0].from_email || '').trim().toLowerCase()
+  }
+
+  const sessionRows = await sql`
+    SELECT tutor_id, booked_by_email
+    FROM learning_sessions
+    WHERE id = ${requestId}
+    LIMIT 1
+  `
+  if (sessionRows.length === 0) return ''
+  const row = sessionRows[0]
+  const bookedByEmail = String(row.booked_by_email || '').trim().toLowerCase()
+  if (bookedByEmail && bookedByEmail !== email) return bookedByEmail
+
+  const tutorId = String(row.tutor_id || '').trim()
+  if (!tutorId) return ''
+  if (tutorId.includes('@') && tutorId.toLowerCase() !== email) return tutorId.toLowerCase()
+
+  const tutorUser = await sql`
+    SELECT email
+    FROM users
+    WHERE id = ${tutorId}
+    LIMIT 1
+  `
+  if (tutorUser.length > 0) {
+    const tutorEmail = String(tutorUser[0].email || '').trim().toLowerCase()
+    if (tutorEmail && tutorEmail !== email) return tutorEmail
+  }
+  return ''
+}
+
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return handleOptions()
   const auth = requireAuth(event)
@@ -89,7 +133,7 @@ export async function handler(event) {
       const requestId = String(body.requestId || '')
       const kind = String(body.kind || 'offer')
       const payload = body.payload && typeof body.payload === 'object' ? body.payload : {}
-      const toEmail =
+      let toEmail =
         payload.toEmail && typeof payload.toEmail === 'string'
           ? payload.toEmail.trim().toLowerCase()
           : ''
@@ -97,14 +141,17 @@ export async function handler(event) {
       if (kind !== 'offer' && kind !== 'tutor_note' && kind !== 'chat') {
         return withCors(json(400, { error: 'Invalid message kind' }))
       }
-      if (kind === 'chat' && !toEmail) {
-        return withCors(json(400, { error: 'Missing recipient email' }))
-      }
       const allowed = await hasThreadAccess(sql, requestId, auth)
       const isTutorOfferBootstrap =
         String(auth.role) === 'tutor' && kind === 'offer' && requestId.startsWith('s-')
       if (!allowed && !isTutorOfferBootstrap) {
         return withCors(json(403, { error: 'Forbidden' }))
+      }
+      if (kind === 'chat' && !toEmail) {
+        toEmail = await resolveRecipientEmail(sql, requestId, auth)
+      }
+      if (kind === 'chat' && !toEmail) {
+        return withCors(json(400, { error: 'Missing recipient email' }))
       }
       const normalizedPayload = { ...payload }
       if (toEmail) normalizedPayload.toEmail = toEmail
