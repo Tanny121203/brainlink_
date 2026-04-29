@@ -257,7 +257,6 @@ function TutorCard({
     () => createAvailability(t.availability),
     [t.availability]
   )
-  const menuItems = tutorCardMenu(t, existingTutor, onBook, onViewProfile, onMessage)
 
   return (
     <div className="card">
@@ -290,20 +289,26 @@ function TutorCard({
                 </span>
               ) : null}
               <div className="pill">₱{t.hourlyRate}/hr</div>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => onBook?.(t)}
-              >
-                {Icons.Calendar({ size: 16 })}
-                Book Session
-              </button>
-              <OverflowMenu items={menuItems} />
             </div>
           </div>
         </div>
 
         <SubjectChips level={t.level} subjects={t.subjects} />
+
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="btn" type="button" onClick={() => onViewProfile?.(t)}>
+            {Icons.CheckBook({ size: 16 })}
+            View profile
+          </button>
+          <button className="btn" type="button" onClick={() => onMessage?.(t)}>
+            {Icons.Message({ size: 16 })}
+            Message
+          </button>
+          <button className="btn" type="button" onClick={() => onBook?.(t)}>
+            {Icons.Calendar({ size: 16 })}
+            Book Session
+          </button>
+        </div>
 
         <div style={{ marginTop: 12 }}>
           <AvailabilityGrid
@@ -315,35 +320,6 @@ function TutorCard({
       </div>
     </div>
   )
-}
-
-function tutorCardMenu(
-  t: TutorProfile,
-  existingTutor: boolean | undefined,
-  onBook?: (tutor: TutorProfile) => void,
-  onViewProfile?: (tutor: TutorProfile) => void,
-  onMessage?: (tutor: TutorProfile) => void
-): OverflowMenuItem[] {
-  return [
-    {
-      key: 'profile',
-      label: 'View profile',
-      icon: Icons.CheckBook,
-      onSelect: () => onViewProfile?.(t),
-    },
-    {
-      key: 'message',
-      label: 'Message',
-      icon: Icons.Message,
-      onSelect: () => onMessage?.(t),
-    },
-    {
-      key: 'book',
-      label: existingTutor ? 'Book Session' : 'Book Session',
-      icon: Icons.Calendar,
-      onSelect: () => onBook?.(t),
-    },
-  ]
 }
 
 function SubjectChips({
@@ -788,6 +764,11 @@ export function DashboardPage({ session }: { session: Session }) {
   const [offerSentForNeedId, setOfferSentForNeedId] = useState<string | null>(
     null
   )
+  const hideStudentHero =
+    session.role === 'student' &&
+    !isMessagesRoute &&
+    !isNotesRoute &&
+    section === 'student.overview'
 
   // Live session version tick — bumped whenever user sessions or hidden mock ids change
   const [sessionsVersion, setSessionsVersion] = useState(0)
@@ -1273,50 +1254,52 @@ export function DashboardPage({ session }: { session: Session }) {
 
   return (
     <main className="grid" style={{ gap: 16 }}>
-      <section className="card page-hero">
-        <div
-          className="page-hero-accent"
-          aria-hidden="true"
-          style={{
-            background: `linear-gradient(180deg, ${theme.strong}, ${theme.soft})`,
-          }}
-        />
-        <div className="page-hero-inner">
-          <div className="card-header" style={{ marginBottom: 0 }}>
-            <div>
-              <RolePill role={session.role} />
-              <h2 style={{ marginTop: 10 }}>
-                {isNotesRoute ? 'Notes' : isMessagesRoute ? 'Messages' : theme.headline}
-              </h2>
-              <p className="subtle" style={{ marginTop: 6, maxWidth: 760 }}>
-                {isNotesRoute
-                  ? session.role === 'student'
-                    ? 'Session summaries and next steps from your tutors.'
-                    : session.role === 'parent'
-                      ? 'See what was covered in each lesson and what to reinforce at home.'
-                      : 'Capture outcomes and homework after each session.'
-                  : isMessagesRoute
+      {hideStudentHero ? null : (
+        <section className="card page-hero">
+          <div
+            className="page-hero-accent"
+            aria-hidden="true"
+            style={{
+              background: `linear-gradient(180deg, ${theme.strong}, ${theme.soft})`,
+            }}
+          />
+          <div className="page-hero-inner">
+            <div className="card-header" style={{ marginBottom: 0 }}>
+              <div>
+                <RolePill role={session.role} />
+                <h2 style={{ marginTop: 10 }}>
+                  {isNotesRoute ? 'Notes' : isMessagesRoute ? 'Messages' : theme.headline}
+                </h2>
+                <p className="subtle" style={{ marginTop: 6, maxWidth: 760 }}>
+                  {isNotesRoute
                     ? session.role === 'student'
-                      ? 'Chats with tutors about your subjects and sessions.'
+                      ? 'Session summaries and next steps from your tutors.'
                       : session.role === 'parent'
-                        ? 'Messages from tutors about your child’s learning.'
-                        : 'Conversations with students and parents.'
-                    : session.role === 'student' &&
-                        (studentProfile?.yearLevel || studentProfile?.learningGoal)
-                      ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
-                      : session.role === 'parent' &&
-                          (parentProfile?.childName || parentProfile?.childYearLevel || primaryChild?.name || primaryChild?.grade)
-                        ? `${theme.blurb} • ${primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}${(primaryChild?.grade ?? parentProfile?.childYearLevel) ? ` • ${primaryChild?.grade ?? parentProfile?.childYearLevel}` : ''}`
-                        : session.role === 'tutor' &&
-                            (tutorProfile?.subjects || tutorProfile?.yearsExperience)
-                          ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
-                          : theme.blurb}
-              </p>
+                        ? 'See what was covered in each lesson and what to reinforce at home.'
+                        : 'Capture outcomes and homework after each session.'
+                    : isMessagesRoute
+                      ? session.role === 'student'
+                        ? 'Chats with tutors about your subjects and sessions.'
+                        : session.role === 'parent'
+                          ? 'Messages from tutors about your child’s learning.'
+                          : 'Conversations with students and parents.'
+                      : session.role === 'student' &&
+                          (studentProfile?.yearLevel || studentProfile?.learningGoal)
+                        ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
+                        : session.role === 'parent' &&
+                            (parentProfile?.childName || parentProfile?.childYearLevel || primaryChild?.name || primaryChild?.grade)
+                          ? `${theme.blurb} • ${primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}${(primaryChild?.grade ?? parentProfile?.childYearLevel) ? ` • ${primaryChild?.grade ?? parentProfile?.childYearLevel}` : ''}`
+                          : session.role === 'tutor' &&
+                              (tutorProfile?.subjects || tutorProfile?.yearsExperience)
+                            ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
+                            : theme.blurb}
+                </p>
+              </div>
+              <div className="pill">{session.displayName}</div>
             </div>
-            <div className="pill">{session.displayName}</div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="dash-layout">
         <aside className="sidebar">
