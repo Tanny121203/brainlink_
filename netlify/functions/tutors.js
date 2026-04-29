@@ -10,6 +10,12 @@ const ALLOWED_CREDENTIAL_MIME_TYPES = new Set([
 ])
 const MAX_CREDENTIALS = 5
 const MAX_CREDENTIAL_SIZE_BYTES = 5 * 1024 * 1024
+const ALLOWED_PHOTO_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+const MAX_PHOTO_SIZE_BYTES = 3 * 1024 * 1024
 
 function toArray(value) {
   if (!value) return []
@@ -37,6 +43,12 @@ function isMissingTutorCredentialsTable(error) {
   const code = error && typeof error === 'object' ? error.code : ''
   const message = String(error?.message || error || '').toLowerCase()
   return code === '42P01' || (message.includes('relation') && message.includes('tutor_credentials'))
+}
+
+function isMissingTutorAvailabilityTable(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const message = String(error?.message || error || '').toLowerCase()
+  return code === '42P01' || (message.includes('relation') && message.includes('tutor_availability'))
 }
 
 function normalizeTutorProfile(profile) {
@@ -69,6 +81,35 @@ function sanitizeIncomingCredentials(value) {
   return credentials
 }
 
+function sanitizeTutorPhotoDataUrl(value) {
+  if (value == null || value === '') return undefined
+  const raw = String(value)
+  const match = raw.match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/)
+  if (!match) throw new Error('Invalid tutor profile photo payload')
+  const mimeType = String(match[1] || '').toLowerCase()
+  const base64 = String(match[2] || '')
+  if (!ALLOWED_PHOTO_MIME_TYPES.has(mimeType)) {
+    throw new Error('Unsupported tutor profile photo type')
+  }
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  const byteSize = Math.floor((base64.length * 3) / 4) - padding
+  if (!Number.isFinite(byteSize) || byteSize <= 0 || byteSize > MAX_PHOTO_SIZE_BYTES) {
+    throw new Error('Tutor profile photo is too large')
+  }
+  return raw
+}
+
+function toCredentialSummary(item) {
+  return {
+    id: String(item.id || ''),
+    fileName: String(item.fileName || ''),
+    mimeType: String(item.mimeType || ''),
+    sizeBytes: Number(item.sizeBytes || 0),
+    uploadedAtIso: String(item.uploadedAtIso || ''),
+    dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : undefined,
+  }
+}
+
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return handleOptions()
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'PATCH') {
@@ -90,7 +131,7 @@ export async function handler(event) {
       let credentialsByTutor = new Map()
       try {
         const credentialsRows = await sql`
-          SELECT id, tutor_user_id, file_name, mime_type, size_bytes, data_url, uploaded_at
+          SELECT id, tutor_user_id, file_name, mime_type, size_bytes, uploaded_at
           FROM tutor_credentials
           ORDER BY uploaded_at DESC
         `
@@ -102,7 +143,6 @@ export async function handler(event) {
             fileName: String(row.file_name || ''),
             mimeType: String(row.mime_type || ''),
             sizeBytes: Number(row.size_bytes || 0),
-            dataUrl: String(row.data_url || ''),
             uploadedAtIso:
               row.uploaded_at instanceof Date
                 ? row.uploaded_at.toISOString()
@@ -110,15 +150,41 @@ export async function handler(event) {
           })
         }
       } catch (error) {
-        if (!isMissingTutorCredentialsTable(error)) throw error
+        // Credentials are optional for tutor browse. Degrade gracefully instead
+        // of failing the whole endpoint when this table is unavailable.
+        console.error('tutors:get credentials query failed', error)
+      }
+
+      let availabilityByEmail = new Map()
+      try {
+        const availabilityRows = await sql`
+          SELECT owner_email, slot_key
+          FROM tutor_availability
+          WHERE is_open = true
+          ORDER BY owner_email ASC, slot_key ASC
+        `
+        for (const row of availabilityRows) {
+          const key = String(row.owner_email || '').toLowerCase()
+          if (!key) continue
+          if (!availabilityByEmail.has(key)) availabilityByEmail.set(key, [])
+          availabilityByEmail.get(key).push(String(row.slot_key || ''))
+        }
+      } catch (error) {
+        // Availability should not take the full tutor directory down.
+        // Fallback to profile.availability if DB query fails.
+        console.error('tutors:get availability query failed', error)
       }
 
       const tutors = rows.map((row) => {
         const profile = normalizeTutorProfile(row.profile)
         const subjects = toArray(profile.subjects)
+        const email = String(row.email || '').toLowerCase()
+        const availabilityFromDb = availabilityByEmail.get(email)
         const credentials =
           credentialsByTutor.get(String(row.id)) ??
-          (Array.isArray(profile.credentials) ? profile.credentials : [])
+          (Array.isArray(profile.credentials)
+            ? profile.credentials.map((item) => toCredentialSummary(item))
+            : [])
         return {
           id: String(row.id),
           name: String(row.display_name || 'Tutor'),
@@ -132,9 +198,11 @@ export async function handler(event) {
             : undefined,
           hourlyRate: Number(profile.hourlyRate || 0) || undefined,
           rating: Number(profile.rating || 0) || undefined,
-          availability: Array.isArray(profile.availability)
-            ? profile.availability.map((x) => String(x || ''))
-            : undefined,
+          availability:
+            availabilityFromDb ??
+            (Array.isArray(profile.availability)
+              ? profile.availability.map((x) => String(x || ''))
+              : undefined),
           city: String(profile.city || ''),
           yearsExperience: String(profile.yearsExperience || ''),
           shortBio: String(profile.shortBio || ''),
@@ -156,10 +224,7 @@ export async function handler(event) {
       yearsExperience: String(incomingProfile.yearsExperience || ''),
       city: String(incomingProfile.city || ''),
       shortBio: String(incomingProfile.shortBio || ''),
-      photoDataUrl:
-        typeof incomingProfile.photoDataUrl === 'string'
-          ? incomingProfile.photoDataUrl
-          : undefined,
+      photoDataUrl: sanitizeTutorPhotoDataUrl(incomingProfile.photoDataUrl),
     }
     const incomingCredentials = sanitizeIncomingCredentials(body.newCredentials)
 

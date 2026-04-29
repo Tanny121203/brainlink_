@@ -1,4 +1,5 @@
 import { apiRequest } from '../lib/api'
+import type { ChildProfile } from './session'
 
 export async function fetchServerSessions() {
   return apiRequest<{ sessions: unknown[] }>('sessions', { method: 'GET' })
@@ -60,6 +61,70 @@ export async function addServerThreadMessage(payload: Record<string, unknown>) {
   })
 }
 
+export type SessionNote = {
+  id: string
+  session_id: string
+  request_id: string
+  tutor_email: string
+  tutor_display_name: string
+  student_name: string
+  subject: string
+  headline: string
+  summary: string
+  next_steps: string[]
+  visibility: string
+  sent_at: string
+  updated_at: string
+}
+
+export async function fetchServerSessionNotes(requestId: string) {
+  return apiRequest<{ notes: SessionNote[] }>(
+    `session-notes?requestId=${encodeURIComponent(requestId)}`,
+    { method: 'GET' }
+  )
+}
+
+export async function createServerSessionNote(payload: {
+  sessionId: string
+  requestId: string
+  tutorDisplayName: string
+  studentName: string
+  subject: string
+  headline: string
+  summary: string
+  nextSteps: string[]
+  visibility?: 'student' | 'parent' | 'both'
+}) {
+  return apiRequest<{ id: string }>('session-notes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function fetchServerChildren() {
+  return apiRequest<{ children: ChildProfile[] }>('children', { method: 'GET' })
+}
+
+export async function createServerChild(payload: Omit<ChildProfile, 'id'>) {
+  return apiRequest<{ id: string }>('children', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateServerChild(payload: ChildProfile) {
+  return apiRequest<{ ok: boolean }>('children', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteServerChild(id: string) {
+  return apiRequest<{ ok: boolean }>(`children?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
 export type ServerTutor = {
   id: string
   name: string
@@ -80,12 +145,19 @@ export type ServerTutor = {
     mimeType: string
     sizeBytes: number
     uploadedAtIso: string
-    dataUrl: string
+    dataUrl?: string
   }>
 }
 
 export async function fetchServerTutors() {
   return apiRequest<{ tutors: ServerTutor[] }>('tutors', { method: 'GET' })
+}
+
+export async function fetchServerTutorCredentialData(credentialId: string) {
+  return apiRequest<{ id: string; dataUrl: string; mimeType: string }>(
+    `tutor-credential?id=${encodeURIComponent(credentialId)}`,
+    { method: 'GET' }
+  )
 }
 
 export async function updateServerTutorProfile(payload: {

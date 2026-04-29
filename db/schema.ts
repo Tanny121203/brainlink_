@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -115,4 +116,47 @@ export const tutorCredentials = pgTable('tutor_credentials', {
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const children = pgTable(
+  'children',
+  {
+    id: varchar('id', { length: 40 }).primaryKey(),
+    parentUserId: varchar('parent_user_id', { length: 40 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 120 }).notNull(),
+    age: integer('age').notNull(),
+    grade: varchar('grade', { length: 80 }).notNull(),
+    details: text('details'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('children_parent_user_idx').on(table.parentUserId)]
+)
+
+export const sessionNotes = pgTable(
+  'session_notes',
+  {
+    id: varchar('id', { length: 40 }).primaryKey(),
+    sessionId: varchar('session_id', { length: 40 })
+      .notNull()
+      .references(() => learningSessions.id, { onDelete: 'cascade' }),
+    requestId: varchar('request_id', { length: 64 }).notNull(),
+    tutorEmail: varchar('tutor_email', { length: 255 }).notNull(),
+    tutorDisplayName: varchar('tutor_display_name', { length: 120 }).notNull(),
+    studentName: varchar('student_name', { length: 120 }).notNull(),
+    subject: varchar('subject', { length: 120 }).notNull(),
+    headline: varchar('headline', { length: 180 }).notNull(),
+    summary: text('summary').notNull(),
+    nextSteps: jsonb('next_steps').$type<string[]>().notNull(),
+    visibility: varchar('visibility', { length: 16 }).notNull().default('both'),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('session_notes_session_idx').on(table.sessionId, table.sentAt),
+    index('session_notes_request_idx').on(table.requestId, table.sentAt),
+    index('session_notes_tutor_idx').on(table.tutorEmail, table.sentAt),
+  ]
+)
 

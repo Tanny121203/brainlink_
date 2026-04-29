@@ -25,6 +25,12 @@ function isMissingTutorCredentialsTable(error) {
   return code === '42P01' || message.includes('relation') && message.includes('tutor_credentials')
 }
 
+function isMissingChildrenTable(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const message = String(error?.message || error || '').toLowerCase()
+  return code === '42P01' || (message.includes('relation') && message.includes('children'))
+}
+
 function sanitizeTutorProfile(profile) {
   if (!profile || typeof profile !== 'object') return null
   const raw = profile
@@ -114,6 +120,20 @@ export async function handler(event) {
         }
       } catch (error) {
         if (!isMissingTutorCredentialsTable(error)) throw error
+      }
+    }
+    if (role === 'parent') {
+      const childName = String(profile?.childName || '').trim()
+      const childYearLevel = String(profile?.childYearLevel || '').trim()
+      if (childName && childYearLevel) {
+        try {
+          await sql`
+            INSERT INTO children (id, parent_user_id, name, age, grade, details)
+            VALUES (${id('child')}, ${userId}, ${childName.slice(0, 120)}, ${12}, ${childYearLevel.slice(0, 80)}, ${null})
+          `
+        } catch (error) {
+          if (!isMissingChildrenTable(error)) throw error
+        }
       }
     }
 

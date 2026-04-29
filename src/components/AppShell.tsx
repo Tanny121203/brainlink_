@@ -17,6 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     location.pathname === '/join'
   const inApp = location.pathname.startsWith('/app')
   const landingHome = location.pathname === '/'
+  const brandTarget = session ? '/app' : '/'
 
   return (
     <div className={`app-shell${landingHome ? ' app-shell--landing-home' : ''}`}>
@@ -24,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="app-layout-column">
           <header className="topbar">
             <div className="brand">
-              <Link to="/" className="brand-logo-wrap">
+              <Link to={brandTarget} className="brand-logo-wrap">
                 <img src={BRAINLINK_LOGO_SRC} alt="BrainLink" className="brand-logo-img" />
               </Link>
             </div>

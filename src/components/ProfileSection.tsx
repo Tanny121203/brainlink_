@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Icons } from './icons'
 import {
+  type ChildProfile,
   updateSession,
   type TutorCredential,
   type ParentProfile,
@@ -9,7 +10,13 @@ import {
   type TutorProfile,
 } from '../state/session'
 import { toast } from './Toast'
-import { updateServerTutorProfile } from '../state/serverApi'
+import {
+  createServerChild,
+  deleteServerChild,
+  fetchServerChildren,
+  updateServerChild,
+  updateServerTutorProfile,
+} from '../state/serverApi'
 import { CredentialPreviewCard } from './CredentialPreviewCard'
 
 type Props = {
@@ -54,42 +61,27 @@ export function ProfileSection({ session, onUpdated }: Props) {
   const [newCredentials, setNewCredentials] = useState<TutorCredential[]>([])
   const [credentialError, setCredentialError] = useState<string | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [parentChildren, setParentChildren] = useState<ChildProfile[]>(
+    () => (session.role === 'parent' ? ((initialProfile as ParentProfile)?.children ?? []) : [])
+  )
+  const [deletedChildIds, setDeletedChildIds] = useState<string[]>([])
 
   const title = useMemo(() => {
     if (session.role === 'student') return 'Your profile'
     if (session.role === 'parent') return 'Student profile'
-    return 'My profile'
+    return 'Tutor profile'
   }, [session.role])
 
-  const handleTutorPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhotoError(null)
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-
-    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
-    const MAX_FILE_BYTES = 3 * 1024 * 1024
-    if (!allowedTypes.has(file.type)) {
-      setPhotoError('Only PNG, JPG, or WEBP images are allowed.')
-      return
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      setPhotoError('Image is too large. Max size is 3 MB.')
-      return
-    }
-
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () =>
-        typeof reader.result === 'string'
-          ? resolve(reader.result)
-          : reject(new Error('Could not read image file.'))
-      reader.onerror = () => reject(new Error('Could not read image file.'))
-      reader.readAsDataURL(file)
-    })
-
-    setTutorFields((prev) => ({ ...prev, photoDataUrl: dataUrl }))
-  }
+  useEffect(() => {
+    if (session.role !== 'parent') return
+    fetchServerChildren()
+      .then((result) => {
+        setParentChildren(result.children ?? [])
+      })
+      .catch(() => {
+        // Keep local profile snapshot if API is unavailable.
+      })
+  }, [session.role])
 
   async function handleSave() {
     const nextProfile =
@@ -124,7 +116,10 @@ export function ProfileSection({ session, onUpdated }: Props) {
             ...tutorFields,
             credentials: [
               ...((tutorFields.credentials as TutorCredential[] | undefined) ?? []),
-              ...(result.profile.credentials ?? []),
+              ...((result.profile.credentials ?? []).map((cred) => ({
+                ...cred,
+                dataUrl: cred.dataUrl || '',
+              })) as TutorCredential[]),
             ],
           },
         })
@@ -136,6 +131,35 @@ export function ProfileSection({ session, onUpdated }: Props) {
         return
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Could not update tutor profile.')
+        return
+      }
+    }
+    if (session.role === 'parent') {
+      try {
+        for (const childId of deletedChildIds) {
+          await deleteServerChild(childId)
+        }
+        for (const child of parentChildren) {
+          const payload = {
+            name: child.name.trim(),
+            age: Number(child.age),
+            grade: child.grade.trim(),
+            details: String(child.details || '').trim(),
+          }
+          if (!payload.name || !payload.grade || !Number.isFinite(payload.age) || payload.age <= 0) {
+            toast.error('Each child needs name, valid age, and grade.')
+            return
+          }
+          if (child.id.startsWith('tmp-')) {
+            const created = await createServerChild(payload)
+            child.id = created.id
+          } else {
+            await updateServerChild({ ...child, ...payload })
+          }
+        }
+        setDeletedChildIds([])
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not save children.')
         return
       }
     }
@@ -202,41 +226,71 @@ export function ProfileSection({ session, onUpdated }: Props) {
     e.target.value = ''
   }
 
+  const handleTutorPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError(null)
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please choose an image file (JPG, PNG, or WEBP).')
+      return
+    }
+    const MAX_FILE_BYTES = 3 * 1024 * 1024
+    if (file.size > MAX_FILE_BYTES) {
+      setPhotoError('Image is too large. Please keep it under 3 MB.')
+      return
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read file.'))
+        reader.onerror = () => reject(new Error('Could not read file.'))
+        reader.readAsDataURL(file)
+      })
+      setTutorFields((prev) => ({ ...prev, photoDataUrl: dataUrl }))
+      e.target.value = ''
+    } catch {
+      setPhotoError('Could not read the selected photo.')
+    }
+  }
+
   return (
     <section className="card">
       <div className="card-inner">
         <div className="card-header">
           <div>
             <h2 style={{ fontSize: 20 }}>{title}</h2>
+            <p className="subtle" style={{ marginTop: 6 }}>
+              Keep your details current so tutors and parents can reach you.
+            </p>
+          </div>
+          <span className="pill">{session.role}</span>
+        </div>
+
+        <div className="grid grid-2" style={{ gap: 12, marginTop: 8 }}>
+          <div className="field">
+            <div className="label">Display name</div>
+            <input
+              className="input"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
+          <div className="field">
+            <div className="label">Email</div>
+            <input
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
           </div>
         </div>
 
-        {session.role !== 'tutor' ? (
-          <>
-            <div className="grid grid-2" style={{ gap: 12, marginTop: 8 }}>
-              <div className="field">
-                <div className="label">Display name</div>
-                <input
-                  className="input"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                />
-              </div>
-              <div className="field">
-                <div className="label">Email</div>
-                <input
-                  className="input"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-              </div>
-            </div>
-
-            <div className="divider" />
-          </>
-        ) : null}
+        <div className="divider" />
 
         {session.role === 'student' ? (
           <div className="grid grid-2" style={{ gap: 12 }}>
@@ -296,32 +350,7 @@ export function ProfileSection({ session, onUpdated }: Props) {
         ) : null}
 
         {session.role === 'parent' ? (
-          <div className="grid grid-2" style={{ gap: 12 }}>
-            <div className="field">
-              <div className="label">Child’s name</div>
-              <input
-                className="input"
-                value={parentFields.childName ?? ''}
-                onChange={(e) =>
-                  setParentFields({ ...parentFields, childName: e.target.value })
-                }
-                placeholder="Child’s name"
-              />
-            </div>
-            <div className="field">
-              <div className="label">Child’s year level</div>
-              <input
-                className="input"
-                value={parentFields.childYearLevel ?? ''}
-                onChange={(e) =>
-                  setParentFields({
-                    ...parentFields,
-                    childYearLevel: e.target.value,
-                  })
-                }
-                placeholder="e.g., Grade 7"
-              />
-            </div>
+          <div className="grid" style={{ gap: 12 }}>
             <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="label">City</div>
               <input
@@ -333,46 +362,129 @@ export function ProfileSection({ session, onUpdated }: Props) {
                 placeholder="City"
               />
             </div>
+            <div className="divider" style={{ margin: '2px 0' }} />
+            <div className="section-title">
+              <div className="label">Children</div>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  setParentChildren((prev) => [
+                    ...prev,
+                    {
+                      id: `tmp-${Math.random().toString(36).slice(2, 8)}`,
+                      name: '',
+                      age: 8,
+                      grade: '',
+                      details: '',
+                    },
+                  ])
+                }
+              >
+                {Icons.UserPlus({ size: 16 })}
+                Add child
+              </button>
+            </div>
+            {parentChildren.length === 0 ? (
+              <p className="muted">No child profile yet. Add one to get started.</p>
+            ) : null}
+            {parentChildren.map((child) => (
+              <div key={child.id} className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
+                <div className="card-inner">
+                  <div className="grid grid-2" style={{ gap: 10 }}>
+                    <div className="field">
+                      <div className="label">Name</div>
+                      <input
+                        className="input"
+                        value={child.name}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, name: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <div className="label">Age</div>
+                      <input
+                        className="input"
+                        inputMode="numeric"
+                        value={String(child.age)}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id
+                                ? { ...item, age: Number(e.target.value || 0) }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <div className="label">Grade</div>
+                      <input
+                        className="input"
+                        value={child.grade}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, grade: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field" style={{ gridColumn: '1 / -1' }}>
+                      <div className="label">Additional details</div>
+                      <textarea
+                        className="input"
+                        rows={2}
+                        value={child.details || ''}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, details: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="btn-row" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        if (!child.id.startsWith('tmp-')) {
+                          setDeletedChildIds((prev) => [...prev, child.id])
+                        }
+                        setParentChildren((prev) => prev.filter((item) => item.id !== child.id))
+                      }}
+                    >
+                      {Icons.Trash({ size: 14 })}
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 
         {session.role === 'tutor' ? (
-          <div className="grid" style={{ gap: 14 }}>
-            <div className="field">
-              <div className="label">Basic info</div>
-              <div className="grid grid-2" style={{ gap: 12, marginTop: 8 }}>
-                <div className="field">
-                  <div className="label">Display name</div>
-                  <input
-                    className="input"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your name"
-                  />
-                </div>
-                <div className="field">
-                  <div className="label">Email</div>
-                  <input
-                    className="input"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="divider" />
-
-            <div className="field">
-              <div className="label">Profile picture</div>
+          <div className="grid grid-2" style={{ gap: 12 }}>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">Profile photo</div>
               <div className="tutor-photo-row">
                 <div
                   className="tutor-photo-preview"
                   aria-hidden={tutorFields.photoDataUrl ? 'false' : 'true'}
                 >
                   {tutorFields.photoDataUrl ? (
-                    <img src={tutorFields.photoDataUrl} alt="Your profile preview" />
+                    <img src={tutorFields.photoDataUrl} alt="Tutor profile preview" />
                   ) : (
                     <span className="tutor-photo-placeholder">
                       {Icons.User({ size: 32 })}
@@ -386,7 +498,7 @@ export function ProfileSection({ session, onUpdated }: Props) {
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
-                      onChange={handleTutorPhotoChange}
+                      onChange={handleTutorPhotoUpload}
                       style={{ display: 'none' }}
                     />
                   </label>
@@ -394,10 +506,9 @@ export function ProfileSection({ session, onUpdated }: Props) {
                     <button
                       type="button"
                       className="btn"
-                      onClick={() => {
+                      onClick={() =>
                         setTutorFields((prev) => ({ ...prev, photoDataUrl: undefined }))
-                        setPhotoError(null)
-                      }}
+                      }
                     >
                       {Icons.Trash({ size: 16 })}
                       Remove
@@ -418,80 +529,68 @@ export function ProfileSection({ session, onUpdated }: Props) {
                 </div>
               </div>
             </div>
-
-            <div className="divider" />
-
             <div className="field">
-              <div className="label">Teaching details</div>
-              <div className="grid grid-2" style={{ gap: 12, marginTop: 8 }}>
-                <div className="field">
-                  <div className="label">Subjects</div>
-                  <input
-                    className="input"
-                    value={tutorFields.subjects ?? ''}
-                    onChange={(e) =>
-                      setTutorFields({ ...tutorFields, subjects: e.target.value })
-                    }
-                    placeholder="e.g., Math, Science"
-                  />
-                </div>
-                <div className="field">
-                  <div className="label">Years of experience</div>
-                  <input
-                    className="input"
-                    value={tutorFields.yearsExperience ?? ''}
-                    onChange={(e) =>
-                      setTutorFields({
-                        ...tutorFields,
-                        yearsExperience: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., 5"
-                  />
-                </div>
-              </div>
+              <div className="label">Subjects</div>
+              <input
+                className="input"
+                value={tutorFields.subjects ?? ''}
+                onChange={(e) =>
+                  setTutorFields({ ...tutorFields, subjects: e.target.value })
+                }
+                placeholder="e.g., Math, Science"
+              />
             </div>
-
             <div className="field">
-              <div className="label">Location</div>
+              <div className="label">Years of experience</div>
+              <input
+                className="input"
+                value={tutorFields.yearsExperience ?? ''}
+                onChange={(e) =>
+                  setTutorFields({
+                    ...tutorFields,
+                    yearsExperience: e.target.value,
+                  })
+                }
+                placeholder="e.g., 5"
+              />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">City</div>
               <input
                 className="input"
                 value={tutorFields.city ?? ''}
-                onChange={(e) => setTutorFields({ ...tutorFields, city: e.target.value })}
+                onChange={(e) =>
+                  setTutorFields({ ...tutorFields, city: e.target.value })
+                }
                 placeholder="City"
               />
             </div>
-
-            <div className="field">
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="label">Short bio</div>
               <textarea
                 className="input"
                 rows={4}
                 value={tutorFields.shortBio ?? ''}
-                onChange={(e) => setTutorFields({ ...tutorFields, shortBio: e.target.value })}
+                onChange={(e) =>
+                  setTutorFields({ ...tutorFields, shortBio: e.target.value })
+                }
                 placeholder="Tell students what makes your teaching style effective."
                 style={{ resize: 'vertical' }}
               />
             </div>
-
-            <div className="divider" />
-
-            <div className="field">
-              <div className="label">Credentials</div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">Uploaded credentials</div>
               {tutorFields.credentials?.length ? (
-                <div className="credential-grid" style={{ marginTop: 8 }}>
+                <div className="credential-grid">
                   {tutorFields.credentials.map((cred) => (
                     <CredentialPreviewCard key={cred.id} cred={cred} />
                   ))}
                 </div>
               ) : (
-                <p className="muted" style={{ marginTop: 8 }}>
-                  No credentials uploaded yet.
-                </p>
+                <p className="muted">No credentials uploaded yet.</p>
               )}
             </div>
-
-            <div className="field">
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="label">Add credentials</div>
               <label className="btn btn-elevated tutor-photo-btn">
                 {Icons.Send({ size: 16 })}

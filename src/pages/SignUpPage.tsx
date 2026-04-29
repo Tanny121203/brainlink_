@@ -64,6 +64,8 @@ export function SignUpPage() {
   // Parent fields
   const [childName, setChildName] = useState('')
   const [childYearLevel, setChildYearLevel] = useState('Grade 8')
+  const [childAge, setChildAge] = useState('8')
+  const [childDetails, setChildDetails] = useState('')
   const [parentCity, setParentCity] = useState('')
 
   // Tutor fields
@@ -174,6 +176,15 @@ export function SignUpPage() {
         childName: childName.trim() || 'My child',
         childYearLevel,
         city: parentCity.trim() || undefined,
+        children: [
+          {
+            id: '',
+            name: childName.trim() || 'My child',
+            age: Number(childAge) || 8,
+            grade: childYearLevel,
+            details: childDetails.trim() || undefined,
+          },
+        ],
       }
       return p
     }
@@ -196,6 +207,8 @@ export function SignUpPage() {
     studentGoal,
     childName,
     childYearLevel,
+    childAge,
+    childDetails,
     parentCity,
     tutorSubjects,
     tutorYears,
@@ -395,6 +408,19 @@ export function SignUpPage() {
                   </div>
                 </div>
                 <div className="field">
+                  <div className="label">Age</div>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    value={childAge}
+                    onChange={(e) => setChildAge(e.target.value)}
+                    placeholder="e.g., 10"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-2">
+                <div className="field">
                   <div className="label">Education level / year level</div>
                   <select
                     className="input"
@@ -419,6 +445,16 @@ export function SignUpPage() {
                     placeholder="Search city..."
                   />
                 </div>
+              </div>
+              <div className="field">
+                <div className="label">Additional details (optional)</div>
+                <textarea
+                  className="input"
+                  rows={2}
+                  value={childDetails}
+                  onChange={(e) => setChildDetails(e.target.value)}
+                  placeholder="Learning style, support needs, goals..."
+                />
               </div>
             </div>
           ) : null}

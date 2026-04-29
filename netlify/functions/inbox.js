@@ -27,6 +27,10 @@ export async function handler(event) {
       const requestId = String(body.requestId || '')
       const kind = String(body.kind || 'offer')
       const payload = body.payload ?? {}
+      if (!requestId) return withCors(json(400, { error: 'Missing requestId' }))
+      if (kind !== 'offer' && kind !== 'tutor_note') {
+        return withCors(json(400, { error: 'Invalid message kind' }))
+      }
       await sql`
         INSERT INTO shared_messages (
           id, request_id, kind, from_role, from_display_name, from_email, payload

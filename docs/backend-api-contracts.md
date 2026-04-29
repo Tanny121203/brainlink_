@@ -22,6 +22,7 @@ Base URL (deployed): `/.netlify/functions`
 ### `GET /auth-me`
 - Auth: cookie required.
 - Returns: `{ session }`
+- For parent accounts, `session.profile.children` is included when available.
 
 ### `POST /auth-logout`
 - Auth: optional.
@@ -83,8 +84,50 @@ Base URL (deployed): `/.netlify/functions`
 - Auth: required.
 - Body:
   - `requestId`: string
-  - `kind`: `'offer' | 'tutor_note' | string`
+  - `kind`: `'offer' | 'tutor_note'`
   - `fromDisplayName`: string
   - `payload`: object
 - Returns: `{ id }`
+
+## Children (Parent)
+
+### `GET /children`
+- Auth: required (`parent` role).
+- Returns: `{ children: ChildRow[] }` for current parent user.
+
+### `POST /children`
+- Auth: required (`parent` role).
+- Body: `{ name, age, grade, details? }`
+- Returns: `{ id }`
+
+### `PATCH /children`
+- Auth: required (`parent` role).
+- Body: `{ id, name, age, grade, details? }`
+- Returns: `{ ok: true }`
+
+### `DELETE /children?id=<childId>`
+- Auth: required (`parent` role).
+- Returns: `{ ok: true }`
+
+## Session Notes
+
+### `GET /session-notes?requestId=<id>`
+- Auth: required.
+- Returns: `{ notes: SessionNoteRow[] }`
+- Access: tutor note author or booked client of the linked session.
+
+### `POST /session-notes`
+- Auth: required (`tutor` role).
+- Body:
+  - `sessionId`: string
+  - `requestId`: string
+  - `tutorDisplayName`: string
+  - `studentName`: string
+  - `subject`: string
+  - `headline`: string
+  - `summary`: string
+  - `nextSteps`: string[]
+  - `visibility?`: `'student' | 'parent' | 'both'`
+- Returns: `{ id }`
+- Side effect: creates a `tutor_note` row in `shared_messages` for thread visibility.
 
