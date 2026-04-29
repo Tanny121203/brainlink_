@@ -180,7 +180,11 @@ export function MessagesPanel({ session }: { session: Session }) {
           text: note.summary,
         }))
         if (alive) {
-          const merged = [...threadMapped, ...noteMapped].sort((a, b) =>
+          const unique = new Map<string, SharedThreadMessage>()
+          for (const item of [...threadMapped, ...noteMapped]) {
+            if (!unique.has(item.id)) unique.set(item.id, item)
+          }
+          const merged = Array.from(unique.values()).sort((a, b) =>
             a.sentAtIso.localeCompare(b.sentAtIso)
           )
           setServerThreadMessages(merged)

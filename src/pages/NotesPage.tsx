@@ -36,6 +36,7 @@ export function NotesPanel({ session }: { session: Session }) {
   const [headline, setHeadline] = useState('')
   const [summary, setSummary] = useState('')
   const [nextStepsText, setNextStepsText] = useState('')
+  const [sharing, setSharing] = useState(false)
 
   async function loadNotes() {
     setLoading(true)
@@ -138,6 +139,7 @@ export function NotesPanel({ session }: { session: Session }) {
                     type="button"
                     className="btn btn-primary btn-tutor"
                     onClick={async () => {
+                      if (sharing) return
                       if (!selectedSession || !headline.trim() || !summary.trim()) {
                         toast.error('Session, headline, and summary are required.')
                         return
@@ -146,26 +148,34 @@ export function NotesPanel({ session }: { session: Session }) {
                         .split('\n')
                         .map((item) => item.trim())
                         .filter(Boolean)
-                      await createServerSessionNote({
-                        sessionId: selectedSession.id,
-                        requestId: selectedSession.id,
-                        tutorDisplayName: session.displayName,
-                        studentName: selectedSession.booked_by_email,
-                        subject: selectedSession.subject,
-                        headline: headline.trim(),
-                        summary: summary.trim(),
-                        nextSteps,
-                        visibility: 'both',
-                      })
-                      setHeadline('')
-                      setSummary('')
-                      setNextStepsText('')
-                      toast.success('Note shared with client.')
-                      await loadNotes()
+                      try {
+                        setSharing(true)
+                        await createServerSessionNote({
+                          sessionId: selectedSession.id,
+                          requestId: selectedSession.id,
+                          tutorDisplayName: session.displayName,
+                          studentName: selectedSession.booked_by_email,
+                          subject: selectedSession.subject,
+                          headline: headline.trim(),
+                          summary: summary.trim(),
+                          nextSteps,
+                          visibility: 'both',
+                        })
+                        setHeadline('')
+                        setSummary('')
+                        setNextStepsText('')
+                        toast.success('Note shared with client.')
+                        await loadNotes()
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : 'Could not share note.')
+                      } finally {
+                        setSharing(false)
+                      }
                     }}
+                    disabled={sharing}
                   >
                     {Icons.Send({ size: 16 })}
-                    Share note
+                    {sharing ? 'Sharing...' : 'Share note'}
                   </button>
                 </div>
               </div>
