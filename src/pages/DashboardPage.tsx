@@ -764,12 +764,6 @@ export function DashboardPage({ session }: { session: Session }) {
   const [offerSentForNeedId, setOfferSentForNeedId] = useState<string | null>(
     null
   )
-  const hideStudentHero =
-    session.role === 'student' &&
-    !isMessagesRoute &&
-    !isNotesRoute &&
-    section === 'student.overview'
-
   // Live session version tick — bumped whenever user sessions or hidden mock ids change
   const [sessionsVersion, setSessionsVersion] = useState(0)
   const bumpSessions = () => setSessionsVersion((v) => v + 1)
@@ -1254,53 +1248,6 @@ export function DashboardPage({ session }: { session: Session }) {
 
   return (
     <main className="grid" style={{ gap: 16 }}>
-      {hideStudentHero ? null : (
-        <section className="card page-hero">
-          <div
-            className="page-hero-accent"
-            aria-hidden="true"
-            style={{
-              background: `linear-gradient(180deg, ${theme.strong}, ${theme.soft})`,
-            }}
-          />
-          <div className="page-hero-inner">
-            <div className="card-header" style={{ marginBottom: 0 }}>
-              <div>
-                <RolePill role={session.role} />
-                <h2 style={{ marginTop: 10 }}>
-                  {isNotesRoute ? 'Notes' : isMessagesRoute ? 'Messages' : theme.headline}
-                </h2>
-                <p className="subtle" style={{ marginTop: 6, maxWidth: 760 }}>
-                  {isNotesRoute
-                    ? session.role === 'student'
-                      ? 'Session summaries and next steps from your tutors.'
-                      : session.role === 'parent'
-                        ? 'See what was covered in each lesson and what to reinforce at home.'
-                        : 'Capture outcomes and homework after each session.'
-                    : isMessagesRoute
-                      ? session.role === 'student'
-                        ? 'Chats with tutors about your subjects and sessions.'
-                        : session.role === 'parent'
-                          ? 'Messages from tutors about your child’s learning.'
-                          : 'Conversations with students and parents.'
-                      : session.role === 'student' &&
-                          (studentProfile?.yearLevel || studentProfile?.learningGoal)
-                        ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
-                        : session.role === 'parent' &&
-                            (parentProfile?.childName || parentProfile?.childYearLevel || primaryChild?.name || primaryChild?.grade)
-                          ? `${theme.blurb} • ${primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}${(primaryChild?.grade ?? parentProfile?.childYearLevel) ? ` • ${primaryChild?.grade ?? parentProfile?.childYearLevel}` : ''}`
-                          : session.role === 'tutor' &&
-                              (tutorProfile?.subjects || tutorProfile?.yearsExperience)
-                            ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
-                            : theme.blurb}
-                </p>
-              </div>
-              <div className="pill">{session.displayName}</div>
-            </div>
-          </div>
-        </section>
-      )}
-
       <section className="dash-layout">
         <aside className="sidebar">
           <div className="card">
