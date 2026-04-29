@@ -261,7 +261,7 @@ function TutorCard({
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Pin({ size: 14 })} {t.city}
               </span>{' '}
-              • {t.mode} •{' '}
+              •{' '}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Star({ size: 14 })} {t.rating.toFixed(1)}
               </span>
@@ -426,7 +426,7 @@ function YourTutorsStudentList({
                     level={t.level}
                     subjects={t.subjects}
                     maxVisible={2}
-                    leadingChips={[t.mode]}
+                    leadingChips={[]}
                   />
                   <div style={{ marginTop: 10 }}>
                     <AvailabilityGrid
@@ -1383,7 +1383,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                   >
                                     {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
-                                  • {s.durationMins} min • {s.mode}
+                                  • {s.durationMins} min
                                   {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
@@ -1600,7 +1600,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                     {Icons.Calendar({ size: 14 })} {prettyWhen(s.when)}
                                   </span>{' '}
-                                  • {s.durationMins} min • {s.mode}
+                                  • {s.durationMins} min
                                   {tutor ? ` • Tutor: ${tutor.name}` : s.tutorName ? ` • Tutor: ${s.tutorName}` : ''}
                                 </p>
                               </div>
@@ -1691,7 +1691,7 @@ export function DashboardPage({ session }: { session: Session }) {
                               level={t.level}
                               subjects={t.subjects}
                               maxVisible={2}
-                              leadingChips={[t.mode]}
+                              leadingChips={[]}
                             />
                             <div style={{ marginTop: 10 }}>
                               <AvailabilityGrid
@@ -2114,7 +2114,7 @@ export function DashboardPage({ session }: { session: Session }) {
                                     {client ? ` • ${client.name}` : ''}
                                   </h3>
                                   <p className="muted" style={{ marginTop: 6 }}>
-                                    {s.when} • {s.durationMins} min • {s.mode}
+                                    {s.when} • {s.durationMins} min
                                   </p>
                                 </div>
                                 <StatusPill text={s.status} tone={s.status === 'Completed' ? 'good' : 'neutral'} />
@@ -2535,7 +2535,7 @@ export function DashboardPage({ session }: { session: Session }) {
         {bookingTutor ? (
           <div className="grid" style={{ gap: 12 }}>
             <p className="muted">
-              {bookingTutor.mode} • ₱{bookingTutor.hourlyRate}/hr •{' '}
+              ₱{bookingTutor.hourlyRate}/hr •{' '}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {Icons.Star({ size: 14 })} {bookingTutor.rating.toFixed(1)}
               </span>
@@ -2612,7 +2612,7 @@ export function DashboardPage({ session }: { session: Session }) {
           <div className="grid" style={{ gap: 12 }}>
             <p className="muted">
               Current: {prettyWhen(rescheduleTarget.when)} •{' '}
-              {rescheduleTarget.durationMins} min • {rescheduleTarget.mode}
+              {rescheduleTarget.durationMins} min
             </p>
             <div className="field">
               <label className="label" htmlFor="reschedule-when">Propose a new time</label>
@@ -2668,8 +2668,7 @@ export function DashboardPage({ session }: { session: Session }) {
               <strong>{cancelTarget.title}</strong>
             </p>
             <p className="muted">
-              {prettyWhen(cancelTarget.when)} • {cancelTarget.durationMins} min •{' '}
-              {cancelTarget.mode}
+              {prettyWhen(cancelTarget.when)} • {cancelTarget.durationMins} min
             </p>
             <p>This will notify the tutor. You can always book again later.</p>
           </div>
