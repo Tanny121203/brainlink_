@@ -289,18 +289,6 @@ function TutorCard({
                 </span>
               ) : null}
               <div className="pill">₱{t.hourlyRate}/hr</div>
-              <button className="btn" type="button" onClick={() => onViewProfile?.(t)}>
-                {Icons.CheckBook({ size: 16 })}
-                View profile
-              </button>
-              <button className="btn" type="button" onClick={() => onMessage?.(t)}>
-                {Icons.Message({ size: 16 })}
-                Message
-              </button>
-              <button className="btn" type="button" onClick={() => onBook?.(t)}>
-                {Icons.Calendar({ size: 16 })}
-                Book Session
-              </button>
             </div>
           </div>
         </div>
@@ -313,6 +301,21 @@ function TutorCard({
             compact
             title="When they’re open"
           />
+        </div>
+
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="btn" type="button" onClick={() => onViewProfile?.(t)}>
+            {Icons.CheckBook({ size: 16 })}
+            View profile
+          </button>
+          <button className="btn" type="button" onClick={() => onMessage?.(t)}>
+            {Icons.Message({ size: 16 })}
+            Message
+          </button>
+          <button className="btn" type="button" onClick={() => onBook?.(t)}>
+            {Icons.Calendar({ size: 16 })}
+            Book Session
+          </button>
         </div>
       </div>
     </div>
