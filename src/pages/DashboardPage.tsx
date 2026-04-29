@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Modal } from '../components/Modal'
-import { RolePill } from '../components/RolePill'
 import {
   parentChild,
   parentSessions,
@@ -195,22 +194,16 @@ function roleTheme(session: Session) {
       return {
         soft: 'var(--student-soft)',
         strong: 'var(--student-strong)',
-        headline: 'Your learning space',
-        blurb: 'Find a tutor, keep sessions on track, and focus on progress.',
       }
     case 'parent':
       return {
         soft: 'var(--parent-soft)',
         strong: 'var(--parent-strong)',
-        headline: 'Find the right tutor',
-        blurb: 'Match by subject, level, schedule, and learning goals.',
       }
     case 'tutor':
       return {
         soft: 'var(--tutor-soft)',
         strong: 'var(--tutor-strong)',
-        headline: 'Clients that fit your expertise',
-        blurb: 'Browse student needs and reach out with a clear offer.',
       }
   }
 }
