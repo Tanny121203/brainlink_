@@ -13,6 +13,7 @@ import {
   type SharedThreadMessage,
   type SharedThreadOfferMessage,
 } from '../state/inbox'
+import { fetchServerSessionNotes, fetchServerThread } from '../state/serverApi'
 import type { Session } from '../state/session'
 
 function formatSentAt(iso: string) {
@@ -58,12 +59,90 @@ export function MessagesPanel({ session }: { session: Session }) {
   const requestId = params.get('request')
   const tutorNameParam = params.get('tutor')
   const [tick, setTick] = useState(0)
+  const [serverThreadMessages, setServerThreadMessages] = useState<SharedThreadMessage[]>([])
 
   useEffect(() => {
     const bump = () => setTick((t) => t + 1)
     window.addEventListener('brainlink-inbox-updated', bump)
     return () => window.removeEventListener('brainlink-inbox-updated', bump)
   }, [])
+
+  useEffect(() => {
+    let alive = true
+    async function loadServerThread() {
+      if (!requestId) {
+        setServerThreadMessages([])
+        return
+      }
+      try {
+        const [threadResult, noteResult] = await Promise.all([
+          fetchServerThread(requestId),
+          fetchServerSessionNotes(requestId),
+        ])
+        const threadMapped = (threadResult.messages ?? [])
+          .map((raw): SharedThreadMessage | null => {
+            const payload = (raw as { payload?: Record<string, unknown> }).payload ?? {}
+            const kind = String((raw as { kind?: string }).kind || '')
+            if (kind === 'offer') {
+              return {
+                id: String((raw as { id?: string }).id || ''),
+                requestId: String((raw as { request_id?: string }).request_id || requestId),
+                sentAtIso: String((raw as { sent_at?: string }).sent_at || new Date().toISOString()),
+                kind: 'offer',
+                fromRole: 'tutor',
+                fromDisplayName: String((raw as { from_display_name?: string }).from_display_name || 'Tutor'),
+                fromEmail: String((raw as { from_email?: string }).from_email || ''),
+                studentName: String(payload.studentName || payload.student_name || 'Student'),
+                subject: String(payload.subject || ''),
+                proposedRate: Number(payload.proposedRate || payload.proposed_rate || 0),
+                availability: String(payload.availability || ''),
+                message: String(payload.message || ''),
+              }
+            }
+            if (kind === 'tutor_note') {
+              return {
+                id: String((raw as { id?: string }).id || ''),
+                requestId: String((raw as { request_id?: string }).request_id || requestId),
+                sentAtIso: String((raw as { sent_at?: string }).sent_at || new Date().toISOString()),
+                kind: 'tutor_note',
+                fromRole: 'tutor',
+                fromDisplayName: String((raw as { from_display_name?: string }).from_display_name || 'Tutor'),
+                fromEmail: String((raw as { from_email?: string }).from_email || ''),
+                subject: String(payload.subject || ''),
+                headline: String(payload.headline || 'Session note'),
+                text: String(payload.text || ''),
+              }
+            }
+            return null
+          })
+          .filter((m): m is SharedThreadMessage => !!m)
+        const noteMapped = (noteResult.notes ?? []).map((note) => ({
+          id: `note-${note.id}`,
+          requestId: note.request_id,
+          sentAtIso: note.sent_at,
+          kind: 'tutor_note' as const,
+          fromRole: 'tutor' as const,
+          fromDisplayName: note.tutor_display_name,
+          fromEmail: note.tutor_email,
+          subject: note.subject,
+          headline: note.headline,
+          text: note.summary,
+        }))
+        if (alive) {
+          const merged = [...threadMapped, ...noteMapped].sort((a, b) =>
+            a.sentAtIso.localeCompare(b.sentAtIso)
+          )
+          setServerThreadMessages(merged)
+        }
+      } catch {
+        if (alive) setServerThreadMessages([])
+      }
+    }
+    loadServerThread()
+    return () => {
+      alive = false
+    }
+  }, [requestId, tick])
 
   const threadIds = useMemo(() => {
     const base = getSharedThreadIdsOrdered()
@@ -86,11 +165,12 @@ export function MessagesPanel({ session }: { session: Session }) {
   const timelineMessages = useMemo(() => {
     if (!requestId) return []
     const stored = getSharedThreadMessages(requestId)
+    const combined = [...stored, ...serverThreadMessages]
     if (session.role === 'student') {
-      return mergeStudentThreadTimeline(stored, requestId)
+      return mergeStudentThreadTimeline(combined, requestId)
     }
-    return stored
-  }, [requestId, session.role, tick])
+    return combined.sort((a, b) => a.sentAtIso.localeCompare(b.sentAtIso))
+  }, [requestId, session.role, tick, serverThreadMessages])
 
   const needFromMock = requestId
     ? studentNeeds.find((s) => s.id === requestId)

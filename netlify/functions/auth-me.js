@@ -8,6 +8,12 @@ function isMissingTutorCredentialsTable(error) {
   return code === '42P01' || message.includes('relation') && message.includes('tutor_credentials')
 }
 
+function isMissingChildrenTable(error) {
+  const code = error && typeof error === 'object' ? error.code : ''
+  const message = String(error?.message || error || '').toLowerCase()
+  return code === '42P01' || (message.includes('relation') && message.includes('children'))
+}
+
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return handleOptions()
   if (event.httpMethod !== 'GET') return withCors(json(405, { error: 'Method not allowed' }))
@@ -50,6 +56,28 @@ export async function handler(event) {
         }
       } catch (error) {
         if (!isMissingTutorCredentialsTable(error)) throw error
+      }
+    }
+    if (user.role === 'parent') {
+      try {
+        const children = await sql`
+          SELECT id, name, age, grade, details, created_at, updated_at
+          FROM children
+          WHERE parent_user_id = ${String(auth.sub)}
+          ORDER BY created_at DESC
+        `
+        profile = {
+          ...(profile && typeof profile === 'object' ? profile : {}),
+          children: children.map((row) => ({
+            id: row.id,
+            name: row.name,
+            age: row.age,
+            grade: row.grade,
+            details: row.details ?? '',
+          })),
+        }
+      } catch (error) {
+        if (!isMissingChildrenTable(error)) throw error
       }
     }
     return withCors(

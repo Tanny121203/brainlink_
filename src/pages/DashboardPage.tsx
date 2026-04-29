@@ -290,6 +290,14 @@ function TutorCard({
                 </span>
               ) : null}
               <div className="pill">₱{t.hourlyRate}/hr</div>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => onBook?.(t)}
+              >
+                {Icons.Calendar({ size: 16 })}
+                Book Session
+              </button>
               <OverflowMenu items={menuItems} />
             </div>
           </div>
@@ -331,7 +339,7 @@ function tutorCardMenu(
     },
     {
       key: 'book',
-      label: existingTutor ? 'Book session' : 'Request session',
+      label: existingTutor ? 'Book Session' : 'Book Session',
       icon: Icons.Calendar,
       onSelect: () => onBook?.(t),
     },
@@ -395,7 +403,7 @@ function tutorListCardMenu(
     },
     {
       key: 'book',
-      label: 'Book session',
+      label: 'Book Session',
       icon: Icons.Calendar,
       onSelect: () => onBook?.(t),
     },
@@ -709,8 +717,14 @@ export function DashboardPage({ session }: { session: Session }) {
     session.role === 'student' ? (session.profile as unknown as { yearLevel?: string; learningGoal?: string } | undefined) : undefined
   const parentProfile =
     session.role === 'parent'
-      ? (session.profile as unknown as { childName?: string; childYearLevel?: string; city?: string } | undefined)
+      ? (session.profile as unknown as {
+          childName?: string
+          childYearLevel?: string
+          city?: string
+          children?: Array<{ name?: string; grade?: string }>
+        } | undefined)
       : undefined
+  const primaryChild = parentProfile?.children?.[0]
   const tutorProfile =
     session.role === 'tutor'
       ? (session.profile as unknown as {
@@ -1291,8 +1305,8 @@ export function DashboardPage({ session }: { session: Session }) {
                         (studentProfile?.yearLevel || studentProfile?.learningGoal)
                       ? `${theme.blurb}${studentProfile?.yearLevel ? ` • ${studentProfile.yearLevel}` : ''}${studentProfile?.learningGoal ? ` • Goal: ${studentProfile.learningGoal}` : ''}`
                       : session.role === 'parent' &&
-                          (parentProfile?.childName || parentProfile?.childYearLevel)
-                        ? `${theme.blurb} • ${parentProfile?.childName ?? parentChild.name}${parentProfile?.childYearLevel ? ` • ${parentProfile.childYearLevel}` : ''}`
+                          (parentProfile?.childName || parentProfile?.childYearLevel || primaryChild?.name || primaryChild?.grade)
+                        ? `${theme.blurb} • ${primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}${(primaryChild?.grade ?? parentProfile?.childYearLevel) ? ` • ${primaryChild?.grade ?? parentProfile?.childYearLevel}` : ''}`
                         : session.role === 'tutor' &&
                             (tutorProfile?.subjects || tutorProfile?.yearsExperience)
                           ? `${theme.blurb}${tutorProfile?.subjects ? ` • Subjects: ${tutorProfile.subjects}` : ''}${tutorProfile?.yearsExperience ? ` • ${tutorProfile.yearsExperience} yrs` : ''}`
@@ -1339,11 +1353,11 @@ export function DashboardPage({ session }: { session: Session }) {
                 {session.role === 'student' && studentProfile?.yearLevel ? (
                   <span className="pill">{studentProfile.yearLevel}</span>
                 ) : session.role === 'parent' &&
-                  (parentProfile?.childName || parentProfile?.childYearLevel) ? (
+                  (parentProfile?.childName || parentProfile?.childYearLevel || primaryChild?.name || primaryChild?.grade) ? (
                   <span className="pill">
-                    {parentProfile?.childName ?? parentChild.name}
-                    {parentProfile?.childYearLevel
-                      ? ` • ${parentProfile.childYearLevel}`
+                    {primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}
+                    {(primaryChild?.grade ?? parentProfile?.childYearLevel)
+                      ? ` • ${primaryChild?.grade ?? parentProfile?.childYearLevel}`
                       : ''}
                   </span>
                 ) : session.role === 'tutor' &&
@@ -1638,7 +1652,7 @@ export function DashboardPage({ session }: { session: Session }) {
                     subtitle="Your child’s upcoming and recent sessions."
                     right={
                       <span className="pill">
-                        {parentProfile?.childName ?? parentChild.name}
+                        {primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}
                       </span>
                     }
                   />
@@ -1845,7 +1859,7 @@ export function DashboardPage({ session }: { session: Session }) {
                     subtitle="Sessions, tutors, and to‑dos at a glance."
                     right={
                       <span className="pill">
-                        {parentProfile?.childName ?? parentChild.name}
+                        {primaryChild?.name ?? parentProfile?.childName ?? parentChild.name}
                       </span>
                     }
                   />

@@ -17,9 +17,18 @@ export type StudentProfile = {
 }
 
 export type ParentProfile = {
-  childName: string
-  childYearLevel: string
+  childName?: string
+  childYearLevel?: string
   city?: string
+  children?: ChildProfile[]
+}
+
+export type ChildProfile = {
+  id: string
+  name: string
+  age: number
+  grade: string
+  details?: string
 }
 
 export type TutorProfile = {

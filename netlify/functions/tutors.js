@@ -10,6 +10,12 @@ const ALLOWED_CREDENTIAL_MIME_TYPES = new Set([
 ])
 const MAX_CREDENTIALS = 5
 const MAX_CREDENTIAL_SIZE_BYTES = 5 * 1024 * 1024
+const ALLOWED_PHOTO_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+const MAX_PHOTO_SIZE_BYTES = 3 * 1024 * 1024
 
 function toArray(value) {
   if (!value) return []
@@ -73,6 +79,24 @@ function sanitizeIncomingCredentials(value) {
     }
   }
   return credentials
+}
+
+function sanitizeTutorPhotoDataUrl(value) {
+  if (value == null || value === '') return undefined
+  const raw = String(value)
+  const match = raw.match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/)
+  if (!match) throw new Error('Invalid tutor profile photo payload')
+  const mimeType = String(match[1] || '').toLowerCase()
+  const base64 = String(match[2] || '')
+  if (!ALLOWED_PHOTO_MIME_TYPES.has(mimeType)) {
+    throw new Error('Unsupported tutor profile photo type')
+  }
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  const byteSize = Math.floor((base64.length * 3) / 4) - padding
+  if (!Number.isFinite(byteSize) || byteSize <= 0 || byteSize > MAX_PHOTO_SIZE_BYTES) {
+    throw new Error('Tutor profile photo is too large')
+  }
+  return raw
 }
 
 function toCredentialSummary(item) {
@@ -200,10 +224,7 @@ export async function handler(event) {
       yearsExperience: String(incomingProfile.yearsExperience || ''),
       city: String(incomingProfile.city || ''),
       shortBio: String(incomingProfile.shortBio || ''),
-      photoDataUrl:
-        typeof incomingProfile.photoDataUrl === 'string'
-          ? incomingProfile.photoDataUrl
-          : undefined,
+      photoDataUrl: sanitizeTutorPhotoDataUrl(incomingProfile.photoDataUrl),
     }
     const incomingCredentials = sanitizeIncomingCredentials(body.newCredentials)
 

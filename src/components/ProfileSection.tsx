@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Icons } from './icons'
 import {
+  type ChildProfile,
   updateSession,
   type TutorCredential,
   type ParentProfile,
@@ -9,7 +10,13 @@ import {
   type TutorProfile,
 } from '../state/session'
 import { toast } from './Toast'
-import { updateServerTutorProfile } from '../state/serverApi'
+import {
+  createServerChild,
+  deleteServerChild,
+  fetchServerChildren,
+  updateServerChild,
+  updateServerTutorProfile,
+} from '../state/serverApi'
 import { CredentialPreviewCard } from './CredentialPreviewCard'
 
 type Props = {
@@ -53,11 +60,27 @@ export function ProfileSection({ session, onUpdated }: Props) {
   )
   const [newCredentials, setNewCredentials] = useState<TutorCredential[]>([])
   const [credentialError, setCredentialError] = useState<string | null>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  const [parentChildren, setParentChildren] = useState<ChildProfile[]>(
+    () => (session.role === 'parent' ? ((initialProfile as ParentProfile)?.children ?? []) : [])
+  )
+  const [deletedChildIds, setDeletedChildIds] = useState<string[]>([])
 
   const title = useMemo(() => {
     if (session.role === 'student') return 'Your profile'
     if (session.role === 'parent') return 'Student profile'
     return 'Tutor profile'
+  }, [session.role])
+
+  useEffect(() => {
+    if (session.role !== 'parent') return
+    fetchServerChildren()
+      .then((result) => {
+        setParentChildren(result.children ?? [])
+      })
+      .catch(() => {
+        // Keep local profile snapshot if API is unavailable.
+      })
   }, [session.role])
 
   async function handleSave() {
@@ -108,6 +131,35 @@ export function ProfileSection({ session, onUpdated }: Props) {
         return
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Could not update tutor profile.')
+        return
+      }
+    }
+    if (session.role === 'parent') {
+      try {
+        for (const childId of deletedChildIds) {
+          await deleteServerChild(childId)
+        }
+        for (const child of parentChildren) {
+          const payload = {
+            name: child.name.trim(),
+            age: Number(child.age),
+            grade: child.grade.trim(),
+            details: String(child.details || '').trim(),
+          }
+          if (!payload.name || !payload.grade || !Number.isFinite(payload.age) || payload.age <= 0) {
+            toast.error('Each child needs name, valid age, and grade.')
+            return
+          }
+          if (child.id.startsWith('tmp-')) {
+            const created = await createServerChild(payload)
+            child.id = created.id
+          } else {
+            await updateServerChild({ ...child, ...payload })
+          }
+        }
+        setDeletedChildIds([])
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not save children.')
         return
       }
     }
@@ -172,6 +224,36 @@ export function ProfileSection({ session, onUpdated }: Props) {
     }
     setNewCredentials((prev) => [...prev, ...added])
     e.target.value = ''
+  }
+
+  const handleTutorPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError(null)
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please choose an image file (JPG, PNG, or WEBP).')
+      return
+    }
+    const MAX_FILE_BYTES = 3 * 1024 * 1024
+    if (file.size > MAX_FILE_BYTES) {
+      setPhotoError('Image is too large. Please keep it under 3 MB.')
+      return
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read file.'))
+        reader.onerror = () => reject(new Error('Could not read file.'))
+        reader.readAsDataURL(file)
+      })
+      setTutorFields((prev) => ({ ...prev, photoDataUrl: dataUrl }))
+      e.target.value = ''
+    } catch {
+      setPhotoError('Could not read the selected photo.')
+    }
   }
 
   return (
@@ -268,32 +350,7 @@ export function ProfileSection({ session, onUpdated }: Props) {
         ) : null}
 
         {session.role === 'parent' ? (
-          <div className="grid grid-2" style={{ gap: 12 }}>
-            <div className="field">
-              <div className="label">Child’s name</div>
-              <input
-                className="input"
-                value={parentFields.childName ?? ''}
-                onChange={(e) =>
-                  setParentFields({ ...parentFields, childName: e.target.value })
-                }
-                placeholder="Child’s name"
-              />
-            </div>
-            <div className="field">
-              <div className="label">Child’s year level</div>
-              <input
-                className="input"
-                value={parentFields.childYearLevel ?? ''}
-                onChange={(e) =>
-                  setParentFields({
-                    ...parentFields,
-                    childYearLevel: e.target.value,
-                  })
-                }
-                placeholder="e.g., Grade 7"
-              />
-            </div>
+          <div className="grid" style={{ gap: 12 }}>
             <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="label">City</div>
               <input
@@ -305,11 +362,173 @@ export function ProfileSection({ session, onUpdated }: Props) {
                 placeholder="City"
               />
             </div>
+            <div className="divider" style={{ margin: '2px 0' }} />
+            <div className="section-title">
+              <div className="label">Children</div>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  setParentChildren((prev) => [
+                    ...prev,
+                    {
+                      id: `tmp-${Math.random().toString(36).slice(2, 8)}`,
+                      name: '',
+                      age: 8,
+                      grade: '',
+                      details: '',
+                    },
+                  ])
+                }
+              >
+                {Icons.UserPlus({ size: 16 })}
+                Add child
+              </button>
+            </div>
+            {parentChildren.length === 0 ? (
+              <p className="muted">No child profile yet. Add one to get started.</p>
+            ) : null}
+            {parentChildren.map((child) => (
+              <div key={child.id} className="card" style={{ background: 'rgba(255,255,255,0.62)' }}>
+                <div className="card-inner">
+                  <div className="grid grid-2" style={{ gap: 10 }}>
+                    <div className="field">
+                      <div className="label">Name</div>
+                      <input
+                        className="input"
+                        value={child.name}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, name: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <div className="label">Age</div>
+                      <input
+                        className="input"
+                        inputMode="numeric"
+                        value={String(child.age)}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id
+                                ? { ...item, age: Number(e.target.value || 0) }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <div className="label">Grade</div>
+                      <input
+                        className="input"
+                        value={child.grade}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, grade: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="field" style={{ gridColumn: '1 / -1' }}>
+                      <div className="label">Additional details</div>
+                      <textarea
+                        className="input"
+                        rows={2}
+                        value={child.details || ''}
+                        onChange={(e) =>
+                          setParentChildren((prev) =>
+                            prev.map((item) =>
+                              item.id === child.id ? { ...item, details: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="btn-row" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        if (!child.id.startsWith('tmp-')) {
+                          setDeletedChildIds((prev) => [...prev, child.id])
+                        }
+                        setParentChildren((prev) => prev.filter((item) => item.id !== child.id))
+                      }}
+                    >
+                      {Icons.Trash({ size: 14 })}
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 
         {session.role === 'tutor' ? (
           <div className="grid grid-2" style={{ gap: 12 }}>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="label">Profile photo</div>
+              <div className="tutor-photo-row">
+                <div
+                  className="tutor-photo-preview"
+                  aria-hidden={tutorFields.photoDataUrl ? 'false' : 'true'}
+                >
+                  {tutorFields.photoDataUrl ? (
+                    <img src={tutorFields.photoDataUrl} alt="Tutor profile preview" />
+                  ) : (
+                    <span className="tutor-photo-placeholder">
+                      {Icons.User({ size: 32 })}
+                    </span>
+                  )}
+                </div>
+                <div className="tutor-photo-actions">
+                  <label className="btn btn-elevated tutor-photo-btn">
+                    {Icons.Camera({ size: 16 })}
+                    {tutorFields.photoDataUrl ? 'Replace photo' : 'Upload photo'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleTutorPhotoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {tutorFields.photoDataUrl ? (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() =>
+                        setTutorFields((prev) => ({ ...prev, photoDataUrl: undefined }))
+                      }
+                    >
+                      {Icons.Trash({ size: 16 })}
+                      Remove
+                    </button>
+                  ) : null}
+                  <div className="muted" style={{ marginTop: 2 }}>
+                    JPG, PNG, or WEBP up to 3 MB.
+                  </div>
+                  {photoError ? (
+                    <div
+                      className="muted"
+                      role="alert"
+                      style={{ color: '#a6262b', marginTop: 4 }}
+                    >
+                      {photoError}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
             <div className="field">
               <div className="label">Subjects</div>
               <input
