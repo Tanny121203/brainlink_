@@ -37,6 +37,7 @@ export function NotesPanel({ session }: { session: Session }) {
   const [summary, setSummary] = useState('')
   const [nextStepsText, setNextStepsText] = useState('')
   const [sharing, setSharing] = useState(false)
+  const [shareStatus, setShareStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   async function loadNotes() {
     setLoading(true)
@@ -45,13 +46,16 @@ export function NotesPanel({ session }: { session: Session }) {
       const rows = (sessionResult.sessions ?? []) as ServerSessionRow[]
       setSessions(rows)
       if (!selectedSessionId && rows.length > 0) setSelectedSessionId(rows[0].id)
-      const allNotes = await Promise.all(
+      const allNotes = await Promise.allSettled(
         rows.map(async (row) => {
           const result = await fetchServerSessionNotes(row.id)
           return result.notes ?? []
         })
       )
-      setNotes(allNotes.flat().sort((a, b) => b.sent_at.localeCompare(a.sent_at)))
+      const collected = allNotes
+        .filter((res): res is PromiseFulfilledResult<SessionNote[]> => res.status === 'fulfilled')
+        .flatMap((res) => res.value)
+      setNotes(collected.sort((a, b) => b.sent_at.localeCompare(a.sent_at)))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load notes.')
     } finally {
@@ -68,6 +72,15 @@ export function NotesPanel({ session }: { session: Session }) {
     () => sessions.find((row) => row.id === selectedSessionId),
     [sessions, selectedSessionId]
   )
+  const canShareNote = !!selectedSession && !!headline.trim() && !!summary.trim() && !sharing
+  const shareHint =
+    sessions.length === 0
+      ? 'No connected sessions yet. Book a session first so notes can be shared.'
+      : !selectedSession
+        ? 'Select a session to share this note.'
+        : !headline.trim() || !summary.trim()
+          ? 'Add both headline and summary to enable sharing.'
+          : null
 
   const subtitle =
     session.role === 'student'
@@ -140,8 +153,13 @@ export function NotesPanel({ session }: { session: Session }) {
                     className="btn btn-primary btn-tutor"
                     onClick={async () => {
                       if (sharing) return
+                      setShareStatus(null)
                       if (!selectedSession || !headline.trim() || !summary.trim()) {
                         toast.error('Session, headline, and summary are required.')
+                        setShareStatus({
+                          type: 'error',
+                          text: 'Please select a session and complete headline + summary.',
+                        })
                         return
                       }
                       const nextSteps = nextStepsText
@@ -165,19 +183,36 @@ export function NotesPanel({ session }: { session: Session }) {
                         setSummary('')
                         setNextStepsText('')
                         toast.success('Note shared with client.')
+                        setShareStatus({ type: 'success', text: 'Note shared successfully.' })
                         await loadNotes()
                       } catch (error) {
-                        toast.error(error instanceof Error ? error.message : 'Could not share note.')
+                        const message =
+                          error instanceof Error ? error.message : 'Could not share note.'
+                        toast.error(message)
+                        setShareStatus({ type: 'error', text: message })
                       } finally {
                         setSharing(false)
                       }
                     }}
-                    disabled={sharing}
+                    disabled={!canShareNote}
                   >
                     {Icons.Send({ size: 16 })}
                     {sharing ? 'Sharing...' : 'Share note'}
                   </button>
                 </div>
+                {shareHint ? (
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    {shareHint}
+                  </p>
+                ) : null}
+                {shareStatus ? (
+                  <p
+                    className="muted"
+                    style={{ marginTop: 8, color: shareStatus.type === 'error' ? '#a6262b' : '#166534' }}
+                  >
+                    {shareStatus.text}
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : null}
